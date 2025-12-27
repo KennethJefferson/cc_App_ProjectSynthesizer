@@ -1,0 +1,32 @@
+{
+  "name": "ccprojectsynth",
+  "version": "1.0.0",
+  "description": "Synthesize working code projects from course transcript files using Claude Code",
+  "type": "module",
+  "main": "src/index.ts",
+  "bin": {
+    "ccprojectsynth": "./src/index.ts"
+  },
+  "scripts": {
+    "start": "bun run src/index.ts",
+    "build": "bun scripts/build.mjs",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "^0.1.76",
+    "@opentui/core": "^0.1.63",
+    "@opentui/solid": "^0.1.63",
+    "solid-js": "^1.9.10"
+  },
+  "devDependencies": {
+    "@types/babel__core": "^7.20.5",
+    "@types/bun": "latest",
+    "@types/node": "^20.0.0",
+    "typescript": "^5.0.0"
+  },
+  "engines": {
+    "bun": ">=1.0.0"
+  },
+  "author": "",
+  "license": "MIT"
+}

@@ -1,0 +1,77 @@
+# Changelog
+
+All notable changes to this project will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [Unreleased]
+
+## [1.1.0] - 2025-12-27
+
+### Added
+
+- **Terminal User Interface (TUI)**: Real-time dashboard built with OpenTUI and SolidJS
+  - Header panel showing application name, phase status, and elapsed time
+  - Progress bar with completion percentage and course statistics
+  - Worker grid displaying real-time status for each concurrent worker
+  - Recent activity feed showing last completed/failed courses
+  - Metrics panel with average time, success rate, and ETA
+- Event system (`src/worker/events.ts`) bridging worker pool to TUI
+- Theme system with violet/purple primary colors
+- Phase tracking: Scanning → Processing → Complete → Shutdown
+
+### Technical Details
+
+- Added OpenTUI dependencies: `@opentui/core`, `@opentui/solid`, `solid-js`
+- TUI components use SolidJS reactive signals for efficient updates
+- Events flow: Workers → EventEmitter → SynthContext → UI Components
+- Build script updated with SolidJS plugin (`scripts/build.mjs`)
+
+## [1.0.0] - 2025-12-27
+
+### Added
+
+- Initial release of CCProjectSynth
+- Two-skill pipeline architecture using Claude Agent SDK
+  - `project-discovery` skill for analyzing SRT transcripts
+  - `project-generator` skill for creating complete project implementations
+- CLI interface with the following options:
+  - `-i, --input`: Specify input directory (required)
+  - `-r, --recursive`: Enable recursive course scanning
+  - `-c, --concurrency`: Set number of concurrent workers (default: 5)
+  - `-s, --scan-workers`: Set number of scan workers (default: 3)
+  - `-h, --help`: Display help message
+  - `-v, --version`: Display version
+- Concurrent course processing with configurable worker pool
+- Parallel project generation within each course
+- Persistent manifest system (`project-findings.json`) for:
+  - Reviewing discovered projects before generation
+  - Tracking generation status per project
+  - Enabling selective regeneration
+- Course state detection and resume support:
+  - Automatic skip of completed courses
+  - Clean restart for interrupted courses
+  - Fresh processing for new courses
+- Graceful shutdown handling:
+  - Single Ctrl+C: Complete current work then exit
+  - Double Ctrl+C: Force immediate exit
+- Natural sort ordering for SRT files
+- Error logging to `error.log` in input directory
+- Debug mode via `DEBUG=1` environment variable
+- Generated project documentation:
+  - CLAUDE.md for future Claude Code sessions
+  - README.md with project overview
+  - USAGE.md with usage instructions
+  - CHANGELOG.md for version history
+
+### Technical Details
+
+- Built with Bun >= 1.0.0
+- Uses `@anthropic-ai/claude-agent-sdk` for agent orchestration
+- TypeScript with strict mode enabled
+- ESM module format
+
+[Unreleased]: https://github.com/user/ccprojectsynth/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/user/ccprojectsynth/compare/v1.0.0...v1.1.0
+[1.0.0]: https://github.com/user/ccprojectsynth/releases/tag/v1.0.0
