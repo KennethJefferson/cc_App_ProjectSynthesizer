@@ -1,17 +1,70 @@
 /**
  * Course scanning - finds courses in input directory
+ *
+ * A COURSE is a top-level directory that contains SRT files (directly or in subfolders).
+ * Subfolders within a course are MODULES, not separate courses.
+ *
+ * Example structure:
+ *   inputDir/
+ *     Course A/                  <- This is a COURSE
+ *       01 - Introduction/       <- This is a module (subfolder)
+ *         lesson1.srt
+ *       02 - Getting Started/    <- This is a module
+ *         lesson2.srt
+ *       progress.json            <- Goes here (course root)
+ *       CODE/__CC_Projects/      <- Goes here (course root)
+ *     Course B/                  <- This is another COURSE
+ *       video.srt
  */
 
 import { join } from 'path';
 import { readdirSync, statSync, existsSync } from 'fs';
-import { containsSrtFiles, listDirectories } from '../utils/file';
+import { listDirectories } from '../utils/file';
 import type { Course } from '../types';
 import { detectCourseState } from './state-detector';
 import { scanCourseSrts } from './srt-scanner';
 
 /**
+ * Check if a directory contains SRT files anywhere within it (recursive)
+ */
+function containsSrtFilesRecursive(dirPath: string): boolean {
+  if (!existsSync(dirPath)) return false;
+
+  const entries = readdirSync(dirPath);
+
+  for (const entry of entries) {
+    // Skip special directories
+    if (entry === 'CODE' || entry === '__CC_Projects' || entry.startsWith('.')) {
+      continue;
+    }
+
+    const entryPath = join(dirPath, entry);
+    const stat = statSync(entryPath);
+
+    if (stat.isFile() && entry.toLowerCase().endsWith('.srt')) {
+      return true;
+    }
+
+    if (stat.isDirectory()) {
+      if (containsSrtFilesRecursive(entryPath)) {
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
+
+/**
  * Scan input directory for courses
- * A course is a directory containing SRT files
+ *
+ * When recursive=true:
+ *   - Immediate children of inputDir that contain SRTs are courses
+ *   - Does NOT descend into course subfolders (they're modules, not courses)
+ *
+ * When recursive=false:
+ *   - If inputDir itself contains SRTs, it's the course
+ *   - Otherwise, immediate children are checked as potential courses
  */
 export function scanForCourses(inputDir: string, recursive: boolean): Course[] {
   const courses: Course[] = [];
@@ -21,11 +74,27 @@ export function scanForCourses(inputDir: string, recursive: boolean): Course[] {
   }
 
   if (recursive) {
-    // Recursive: find all directories containing SRT files
-    scanRecursive(inputDir, courses);
+    // Recursive mode: find course folders (immediate children with SRTs)
+    const subdirs = listDirectories(inputDir);
+
+    for (const subdir of subdirs) {
+      // Skip special directories
+      if (subdir === 'CODE' || subdir === '__CC_Projects' || subdir.startsWith('.')) {
+        continue;
+      }
+
+      const subdirPath = join(inputDir, subdir);
+
+      if (containsSrtFilesRecursive(subdirPath)) {
+        const course = buildCourse(subdirPath);
+        if (course) {
+          courses.push(course);
+        }
+      }
+    }
   } else {
     // Non-recursive: check if input dir itself is a course
-    if (containsSrtFiles(inputDir)) {
+    if (containsSrtFilesRecursive(inputDir)) {
       const course = buildCourse(inputDir);
       if (course) {
         courses.push(course);
@@ -34,8 +103,12 @@ export function scanForCourses(inputDir: string, recursive: boolean): Course[] {
       // Check immediate subdirectories
       const subdirs = listDirectories(inputDir);
       for (const subdir of subdirs) {
+        if (subdir === 'CODE' || subdir === '__CC_Projects' || subdir.startsWith('.')) {
+          continue;
+        }
+
         const subdirPath = join(inputDir, subdir);
-        if (containsSrtFiles(subdirPath)) {
+        if (containsSrtFilesRecursive(subdirPath)) {
           const course = buildCourse(subdirPath);
           if (course) {
             courses.push(course);
@@ -49,40 +122,10 @@ export function scanForCourses(inputDir: string, recursive: boolean): Course[] {
 }
 
 /**
- * Recursively scan for courses
+ * Extract course name from path
  */
-function scanRecursive(dirPath: string, courses: Course[]): void {
-  const entries = readdirSync(dirPath);
-
-  // First check if current directory is a course
-  const hasSrts = entries.some(
-    (e) => e.toLowerCase().endsWith('.srt') && statSync(join(dirPath, e)).isFile()
-  );
-
-  if (hasSrts) {
-    // This directory is a course
-    const course = buildCourse(dirPath);
-    if (course) {
-      courses.push(course);
-    }
-    // Don't recurse into course subdirectories (they're part of the course)
-    return;
-  }
-
-  // Not a course, check subdirectories
-  for (const entry of entries) {
-    // Skip special directories
-    if (entry === 'CODE' || entry === '__CC_Projects' || entry.startsWith('.')) {
-      continue;
-    }
-
-    const entryPath = join(dirPath, entry);
-    const stat = statSync(entryPath);
-
-    if (stat.isDirectory()) {
-      scanRecursive(entryPath, courses);
-    }
-  }
+function extractCourseName(coursePath: string): string {
+  return coursePath.split(/[\\/]/).pop() || coursePath;
 }
 
 /**
@@ -90,18 +133,20 @@ function scanRecursive(dirPath: string, courses: Course[]): void {
  */
 function buildCourse(coursePath: string): Course | null {
   const state = detectCourseState(coursePath);
-  
+  const name = extractCourseName(coursePath);
+
   // Skip already completed courses
   if (state === 'skipped') {
     return {
       path: coursePath,
+      name,
       srtFiles: [],
       state: 'skipped',
       hasSubfolders: false,
     };
   }
 
-  // Scan for SRT files
+  // Scan for SRT files (recursively within course)
   const srtFiles = scanCourseSrts(coursePath);
 
   if (srtFiles.length === 0) {
@@ -113,6 +158,7 @@ function buildCourse(coursePath: string): Course | null {
 
   return {
     path: coursePath,
+    name,
     srtFiles,
     state,
     hasSubfolders,
@@ -133,7 +179,7 @@ function checkForModuleSubfolders(coursePath: string): boolean {
     const entryPath = join(coursePath, entry);
     const stat = statSync(entryPath);
 
-    if (stat.isDirectory() && containsSrtFiles(entryPath)) {
+    if (stat.isDirectory() && containsSrtFilesRecursive(entryPath)) {
       return true;
     }
   }

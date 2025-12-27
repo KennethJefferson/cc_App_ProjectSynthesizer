@@ -10,6 +10,7 @@ export type CourseState =
 
 export interface Course {
   path: string;
+  name: string;
   srtFiles: string[];
   state: CourseState;
   hasSubfolders: boolean;

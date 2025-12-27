@@ -37,7 +37,7 @@ ${srtSection}
 
 Follow the project-discovery skill workflow:
 
-1. **Create progress.json** in the course root with status "started"
+1. **Create progress.json** in the COURSE ROOT with status "started"
    Path: ${course.path}/progress.json
 
 2. **Analyze SRT content sequentially** to identify projects:
@@ -46,10 +46,18 @@ Follow the project-discovery skill workflow:
    - Note project endings ("that completes", moving to different topic)
    - Skip non-project content (intros, conclusions, pure theory)
 
-3. **Create project-findings.json** with discovered projects:
+3. **Create project-findings.json** in the COURSE ROOT:
    Path: ${course.path}/project-findings.json
 
 4. **Output the manifest JSON** at the end of your response
+
+## CRITICAL: File Location Rules
+
+- ONLY create files at the EXACT paths specified above
+- The COURSE ROOT is: ${course.path}
+- DO NOT create any CODE folders during discovery
+- DO NOT create any folders inside module subfolders
+- All files go in the COURSE ROOT directory only
 
 ## Output Format
 
@@ -118,28 +126,38 @@ ${srt.content}
 
 ${srtSection}
 
+## CRITICAL: Output Location
+
+- COURSE ROOT: ${course.path}
+- PROJECT OUTPUT: ${outputPath}
+- ALL files MUST go inside: ${outputPath}
+- DO NOT create CODE folders anywhere else
+- DO NOT create folders in module subfolders (e.g., "01 - Introduction/CODE" is WRONG)
+
 ## Instructions
 
 Follow the project-generator skill workflow:
 
 1. **Create project directory**: ${outputPath}
+   - This is the ONLY location for project files
 
-2. **Generate required documentation files**:
+2. **Generate required documentation files** (inside ${outputPath}):
    - CLAUDE.md (project context for future Claude sessions)
    - README.md (user documentation)
    - USAGE.md (detailed usage guide)
    - CHANGELOG.md (version history - APPEND ONLY if exists!)
 
-3. **Generate configuration files** based on tech stack:
+3. **Generate configuration files** based on tech stack (inside ${outputPath}):
    - package.json, tsconfig.json, requirements.txt, etc.
 
-4. **Generate all source code**:
+4. **Generate all source code** (inside ${outputPath}):
    - WORKING code only (no TODOs, no placeholders)
    - Follow patterns from transcripts
    - Include proper error handling
    - All imports must be valid
 
-5. **Update project-findings.json**:
+5. **Update project-findings.json** in COURSE ROOT:
+   - Path: ${course.path}/project-findings.json
    - Set generation_status to "complete"
    - Set generated_at to current timestamp
    - Set output_path to "${outputPath}"

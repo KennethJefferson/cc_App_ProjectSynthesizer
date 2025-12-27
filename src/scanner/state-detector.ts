@@ -25,7 +25,8 @@ export function detectCourseState(coursePath: string): CourseState {
     const progress = readProgressFile(coursePath);
 
     if (progress) {
-      if (progress.status === 'complete') {
+      // Accept both 'complete' and 'completed' (agents may use either)
+      if (progress.status === 'complete' || progress.status === 'completed') {
         return 'skipped'; // Already done
       } else {
         // Status is "started" - incomplete, need to restart
