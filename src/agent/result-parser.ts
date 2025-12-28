@@ -7,7 +7,9 @@ import { join } from 'path';
 import type {
   DiscoveryResult,
   GeneratedProject,
-  ProjectFindingsManifest
+  ProjectFindingsManifest,
+  ArchitectureSpec,
+  ArchitectResult,
 } from '../types';
 import { logger } from '../utils/logger';
 import { readJsonFile } from '../utils/file';
@@ -204,13 +206,6 @@ function extractManifestJson(text: string): any | null {
 }
 
 /**
- * Extract any JSON from result text
- */
-function extractJson(text: string): any | null {
-  return extractManifestJson(text);
-}
-
-/**
  * Normalize manifest to expected structure
  *
  * Handles schema variations from different agent outputs:
@@ -222,12 +217,15 @@ function normalizeManifest(
   parsed: any,
   coursePath: string
 ): ProjectFindingsManifest {
-  const projects = Array.isArray(parsed.projects)
-    ? parsed.projects.map((p: any, index: number) => {
-        // Handle source_srts that may be objects with file property
+  // Handle schema variations: projects, projects_found, projects_identified
+  const rawProjects = parsed.projects || parsed.projects_found || parsed.projects_identified || [];
+  const projects = Array.isArray(rawProjects)
+    ? rawProjects.map((p: any, index: number) => {
+        // Handle source_srts/source_lectures that may be objects with file property
+        const rawSources = p.source_srts || p.source_lectures || [];
         let sourceSrts: string[] = [];
-        if (Array.isArray(p.source_srts)) {
-          sourceSrts = p.source_srts.map((s: any) => {
+        if (Array.isArray(rawSources)) {
+          sourceSrts = rawSources.map((s: any) => {
             if (typeof s === 'string') return s;
             if (s && typeof s === 'object' && s.file) return s.file;
             return String(s);
@@ -236,8 +234,11 @@ function normalizeManifest(
 
         // Generate synthesized_name if not provided
         const projectName = p.project_name || p.name || 'Unknown';
-        const synthesizedName = p.synthesized_name ||
+        const synthesizedName = p.synthesized_name || p.project_id ||
           `Project_${projectName.replace(/[^a-zA-Z0-9]/g, '')}`;
+
+        // Handle tech_stack/technologies variations
+        const techStack = p.tech_stack || p.technologies || [];
 
         return {
           id: p.id || p.project_id || `proj_${String(index + 1).padStart(3, '0')}`,
@@ -245,7 +246,7 @@ function normalizeManifest(
           synthesized_name: String(synthesizedName),
           description: String(p.description || ''),
           source_srts: sourceSrts,
-          tech_stack: Array.isArray(p.tech_stack) ? p.tech_stack : [],
+          tech_stack: Array.isArray(techStack) ? techStack : [],
           complexity: validateComplexity(p.complexity),
           generation_status: 'not_started' as const,
           generated_at: null,
@@ -316,4 +317,159 @@ export function extractResultFromMessage(message: any): string | null {
     return message.result || null;
   }
   return null;
+}
+
+/**
+ * Parse architecture extraction phase result
+ *
+ * Priority:
+ * 1. Read from architecture-{projectName}.json file on disk
+ * 2. Fall back to extracting JSON from result text
+ */
+export function parseArchitectResult(
+  resultText: string,
+  projectName: string,
+  coursePath: string
+): ArchitectResult {
+  try {
+    // First, try to read from file (most reliable)
+    const specPath = join(coursePath, `architecture-${projectName}.json`);
+    let spec: ArchitectureSpec | null = null;
+
+    if (existsSync(specPath)) {
+      const rawSpec = readJsonFile(specPath);
+      spec = normalizeArchitectureSpec(rawSpec, projectName);
+      if (process.env.DEBUG) {
+        logger.info(`Read architecture spec from file: ${specPath}`);
+      }
+    }
+
+    // Fall back to extracting from result text
+    if (!spec) {
+      const json = extractJson(resultText);
+      if (json) {
+        spec = normalizeArchitectureSpec(json, projectName);
+      }
+    }
+
+    if (!spec) {
+      return {
+        success: false,
+        spec: null,
+        error: 'Could not parse architecture spec',
+        spec_path: null,
+      };
+    }
+
+    return {
+      success: true,
+      spec,
+      error: null,
+      spec_path: existsSync(specPath) ? specPath : null,
+    };
+  } catch (error) {
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    logger.warn(`Failed to parse architecture result: ${errorMsg}`);
+
+    return {
+      success: false,
+      spec: null,
+      error: `Parse error: ${errorMsg}`,
+      spec_path: null,
+    };
+  }
+}
+
+/**
+ * Normalize architecture spec to expected structure
+ */
+function normalizeArchitectureSpec(
+  parsed: any,
+  projectName: string
+): ArchitectureSpec {
+  return {
+    project_name: parsed.project_name || projectName,
+    synthesized_name: parsed.synthesized_name || projectName,
+    description: parsed.description || '',
+    tech_stack: Array.isArray(parsed.tech_stack) ? parsed.tech_stack : [],
+    dependencies: parsed.dependencies || {},
+    dev_dependencies: parsed.dev_dependencies || {},
+    file_structure: Array.isArray(parsed.file_structure)
+      ? parsed.file_structure.map((f: any) => ({
+          path: f.path || '',
+          purpose: f.purpose || '',
+          exports: Array.isArray(f.exports) ? f.exports : [],
+        }))
+      : [],
+    data_models: Array.isArray(parsed.data_models)
+      ? parsed.data_models.map((m: any) => ({
+          name: m.name || '',
+          orm_type: m.orm_type || 'plain',
+          fields: Array.isArray(m.fields)
+            ? m.fields.map((f: any) => ({
+                name: f.name || '',
+                type: f.type || 'string',
+                required: f.required !== false,
+                default: f.default,
+              }))
+            : [],
+          relations: Array.isArray(m.relations) ? m.relations : [],
+        }))
+      : [],
+    api_routes: Array.isArray(parsed.api_routes)
+      ? parsed.api_routes.map((r: any) => ({
+          method: validateHttpMethod(r.method),
+          path: r.path || '',
+          description: r.description || '',
+          request_body: r.request_body,
+          response: r.response,
+        }))
+      : [],
+    components: Array.isArray(parsed.components)
+      ? parsed.components.map((c: any) => ({
+          name: c.name || '',
+          type: validateComponentType(c.type),
+          props: Array.isArray(c.props) ? c.props : [],
+          dependencies: Array.isArray(c.dependencies) ? c.dependencies : [],
+        }))
+      : [],
+    key_patterns: Array.isArray(parsed.key_patterns) ? parsed.key_patterns : [],
+    build_order: Array.isArray(parsed.build_order) ? parsed.build_order : [],
+    env_vars: Array.isArray(parsed.env_vars) ? parsed.env_vars : [],
+    implementation_notes: Array.isArray(parsed.implementation_notes)
+      ? parsed.implementation_notes
+      : [],
+  };
+}
+
+/**
+ * Validate HTTP method
+ */
+function validateHttpMethod(
+  method: any
+): 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE' {
+  const upper = String(method).toUpperCase();
+  if (['GET', 'POST', 'PUT', 'PATCH', 'DELETE'].includes(upper)) {
+    return upper as 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
+  }
+  return 'GET';
+}
+
+/**
+ * Validate component type
+ */
+function validateComponentType(
+  type: any
+): 'page' | 'layout' | 'component' | 'hook' | 'context' | 'util' {
+  if (['page', 'layout', 'component', 'hook', 'context', 'util'].includes(type)) {
+    return type;
+  }
+  return 'component';
+}
+
+/**
+ * Extract any JSON from result text (shared helper)
+ */
+function extractJson(text: string): any | null {
+  return extractManifestJson(text);
 }
