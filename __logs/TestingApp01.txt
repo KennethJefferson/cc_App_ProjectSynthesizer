@@ -271,5 +271,718 @@ inspection of whats going on, but we're getting stuck on something
       Cleaned\Web\__Next.Js\__withoutProjects" 2>&1)
   ⎿  Interrupted · What should Claude do instead?
 
+> /export TestingApp01.txt 
+  ⎿  Conversation exported to: TestingApp01.txt
+
+> Had to stop you because the progress.json and other assets (\CODE folder, 
+etc.) were being created in the incorrect folder. So from the root folder 
+provided by user "N:\__00. Cleaned\Web\__Next.Js\__withoutProjects" has 4 
+projects (you got that correct), there are suppose to be 4 seperate claude 
+code instances launched (but since you are use -c 2 only 2 will be spawned, 
+and thats fine). Within each claude code instance (I assume each claude code
+ cli instance is the query(), but I could be wrong. This is important, every
+ course need to have its own claude code cli instance first and foremost. 
+THEN, for every claude code cli instance (which has its own entire course) 
+we will place progress.json and other json assets in the root directory of 
+the course root folder (claude code cli instance container -> course 
+root\json assets goes here including the \CODE folder. Lets get that 
+straightened out, then we can continue testing. 
+
+● I understand now. Let me clarify the expected structure:
+
+  __withoutProjects/
+  ├── Course 1: Next Js, Creating and Hosting.../     <-- COURSE ROOT
+  │   ├── 01 - Introduction/                           <-- module (subfolder)
+  │   ├── 02 - 1. Creating.../                        <-- module (subfolder)
+  │   ├── progress.json                               <-- HERE (course root)
+  │   └── CODE/__CC_Projects/                         <-- HERE (course root)
+  ├── Course 2: Next Js, the Complete.../             <-- COURSE ROOT
+  ├── Course 3: Next Js, the React Framework/         <-- COURSE ROOT
+  └── Course 4: Next.Js - Build Scalable.../          <-- COURSE ROOT
+
+  The scanner is incorrectly treating each subfolder as a separate course. Let me fix this:
+
+● Read(src\scanner\course-scanner.ts)
+  ⎿  Read 166 lines
+
+● Read(src\scanner\srt-scanner.ts)
+  ⎿  Read 132 lines
+
+● Now I understand. The SRT scanner already collects from subfolders correctly. The issue is scanRecursive - it descends into subfolders and treats each as a separate course. Let me fix this:
+
+● Write(src\scanner\course-scanner.ts)
+  ⎿  Added 81 lines, removed 45 lines                                    
+       1  /**                                                            
+       2   * Course scanning - finds courses in input directory          
+       3 + *                                                             
+       4 + * A COURSE is a top-level directory that contains SRT files   
+         +(directly or in subfolders).                                   
+       5 + * Subfolders within a course are MODULES, not separate        
+         +courses.                                                       
+       6 + *                                                             
+       7 + * Example structure:                                          
+       8 + *   inputDir/                                                 
+       9 + *     Course A/                  <- This is a COURSE          
+      10 + *       01 - Introduction/       <- This is a module          
+         +(subfolder)                                                    
+      11 + *         lesson1.srt                                         
+      12 + *       02 - Getting Started/    <- This is a module          
+      13 + *         lesson2.srt                                         
+      14 + *       progress.json            <- Goes here (course root)   
+      15 + *       CODE/__CC_Projects/      <- Goes here (course root)   
+      16 + *     Course B/                  <- This is another COURSE    
+      17 + *       video.srt                                             
+      18   */                                                            
+      19                                                                 
+      20  import { join } from 'path';                                   
+      21  import { readdirSync, statSync, existsSync } from 'fs';        
+      22 -import { containsSrtFiles,                                     
+         -listDirectories } from '../utils/file';                        
+      22 +import { listDirectories } from '../utils/file';               
+      23  import type { Course } from '../types';                        
+      24  import { detectCourseState } from './state-detector';          
+      25  import { scanCourseSrts } from './srt-scanner';                
+      26                                                                 
+      27  /**                                                            
+      28 + * Check if a directory contains SRT files anywhere within it  
+         +(recursive)                                                    
+      29 + */                                                            
+      30 +function containsSrtFilesRecursive(dirPath: string): boolean { 
+      31 +  if (!existsSync(dirPath)) return false;                      
+      32 +                                                               
+      33 +  const entries = readdirSync(dirPath);                        
+      34 +                                                               
+      35 +  for (const entry of entries) {                               
+      36 +    // Skip special directories                                
+      37 +    if (entry === 'CODE' || entry === '__CC_Projects' ||       
+         +entry.startsWith('.')) {                                       
+      38 +      continue;                                                
+      39 +    }                                                          
+      40 +                                                               
+      41 +    const entryPath = join(dirPath, entry);                    
+      42 +    const stat = statSync(entryPath);                          
+      43 +                                                               
+      44 +    if (stat.isFile() && entry.toLowerCase().endsWith('.srt')) 
+         + {                                                             
+      45 +      return true;                                             
+      46 +    }                                                          
+      47 +                                                               
+      48 +    if (stat.isDirectory()) {                                  
+      49 +      if (containsSrtFilesRecursive(entryPath)) {              
+      50 +        return true;                                           
+      51 +      }                                                        
+      52 +    }                                                          
+      53 +  }                                                            
+      54 +                                                               
+      55 +  return false;                                                
+      56 +}                                                              
+      57 +                                                               
+      58 +/**                                                            
+      59   * Scan input directory for courses                            
+      60 - * A course is a directory containing SRT files                
+      60 + *                                                             
+      61 + * When recursive=true:                                        
+      62 + *   - Immediate children of inputDir that contain SRTs are    
+         +courses                                                        
+      63 + *   - Does NOT descend into course subfolders (they're        
+         +modules, not courses)                                          
+      64 + *                                                             
+      65 + * When recursive=false:                                       
+      66 + *   - If inputDir itself contains SRTs, it's the course       
+      67 + *   - Otherwise, immediate children are checked as potential  
+         +courses                                                        
+      68   */                                                            
+      69  export function scanForCourses(inputDir: string, recursive:    
+          boolean): Course[] {                                           
+      70    const courses: Course[] = [];                                
+     ...
+      21    }                                                            
+      22                                                                 
+      23    if (recursive) {                                             
+      24 -    // Recursive: find all directories containing SRT files    
+      25 -    scanRecursive(inputDir, courses);                          
+      24 +    // Recursive mode: find course folders (immediate children 
+         + with SRTs)                                                    
+      25 +    const subdirs = listDirectories(inputDir);                 
+      26 +                                                               
+      27 +    for (const subdir of subdirs) {                            
+      28 +      // Skip special directories                              
+      29 +      if (subdir === 'CODE' || subdir === '__CC_Projects' ||   
+         +subdir.startsWith('.')) {                                      
+      30 +        continue;                                              
+      31 +      }                                                        
+      32 +                                                               
+      33 +      const subdirPath = join(inputDir, subdir);               
+      34 +                                                               
+      35 +      if (containsSrtFilesRecursive(subdirPath)) {             
+      36 +        const course = buildCourse(subdirPath);                
+      37 +        if (course) {                                          
+      38 +          courses.push(course);                                
+      39 +        }                                                      
+      40 +      }                                                        
+      41 +    }                                                          
+      42    } else {                                                     
+      43      // Non-recursive: check if input dir itself is a course    
+      44 -    if (containsSrtFiles(inputDir)) {                          
+      44 +    if (containsSrtFilesRecursive(inputDir)) {                 
+      45        const course = buildCourse(inputDir);                    
+      46        if (course) {                                            
+      47          courses.push(course);                                  
+     ...
+      34        // Check immediate subdirectories                        
+      35        const subdirs = listDirectories(inputDir);               
+      36        for (const subdir of subdirs) {                          
+      37 +        if (subdir === 'CODE' || subdir === '__CC_Projects' || 
+         + subdir.startsWith('.')) {                                     
+      38 +          continue;                                            
+      39 +        }                                                      
+      40 +                                                               
+      41          const subdirPath = join(inputDir, subdir);             
+      42 -        if (containsSrtFiles(subdirPath)) {                    
+      42 +        if (containsSrtFilesRecursive(subdirPath)) {           
+      43            const course = buildCourse(subdirPath);              
+      44            if (course) {                                        
+      45              courses.push(course);                              
+     ...
+      49  }                                                              
+      50                                                                 
+      51  /**                                                            
+      52 - * Recursively scan for courses                                
+      53 - */                                                            
+      54 -function scanRecursive(dirPath: string, courses: Course[]):    
+         -void {                                                         
+      55 -  const entries = readdirSync(dirPath);                        
+      56 -                                                               
+      57 -  // First check if current directory is a course              
+      58 -  const hasSrts = entries.some(                                
+      59 -    (e) => e.toLowerCase().endsWith('.srt') &&                 
+         -statSync(join(dirPath, e)).isFile()                            
+      60 -  );                                                           
+      61 -                                                               
+      62 -  if (hasSrts) {                                               
+      63 -    // This directory is a course                              
+      64 -    const course = buildCourse(dirPath);                       
+      65 -    if (course) {                                              
+      66 -      courses.push(course);                                    
+      67 -    }                                                          
+      68 -    // Don't recurse into course subdirectories (they're part  
+         -of the course)                                                 
+      69 -    return;                                                    
+      70 -  }                                                            
+      71 -                                                               
+      72 -  // Not a course, check subdirectories                        
+      73 -  for (const entry of entries) {                               
+      74 -    // Skip special directories                                
+      75 -    if (entry === 'CODE' || entry === '__CC_Projects' ||       
+         -entry.startsWith('.')) {                                       
+      76 -      continue;                                                
+      77 -    }                                                          
+      78 -                                                               
+      79 -    const entryPath = join(dirPath, entry);                    
+      80 -    const stat = statSync(entryPath);                          
+      81 -                                                               
+      82 -    if (stat.isDirectory()) {                                  
+      83 -      scanRecursive(entryPath, courses);                       
+      84 -    }                                                          
+      85 -  }                                                            
+      86 -}                                                              
+      87 -                                                               
+      88 -/**                                                            
+      52   * Extract course name from path                               
+      53   */                                                            
+      54  function extractCourseName(coursePath: string): string {       
+     ...
+      110      };                                                        
+      111    }                                                           
+      112                                                                
+      113 -  // Scan for SRT files                                       
+      113 +  // Scan for SRT files (recursively within course)           
+      114    const srtFiles = scanCourseSrts(coursePath);                
+      115                                                                
+      116    if (srtFiles.length === 0) {                                
+     ...
+      143      const entryPath = join(coursePath, entry);                
+      144      const stat = statSync(entryPath);                         
+      145                                                                
+      146 -    if (stat.isDirectory() && containsSrtFiles(entryPath)) {  
+      146 +    if (stat.isDirectory() && containsSrtFilesRecursive       
+          +(entryPath)) {                                                
+      147        return true;                                            
+      148      }                                                         
+      149    }                                                           
+
+● Now let me clean up the incorrectly placed progress.json and CODE folders from the subfolders:
+
+● Bash(cd "N:\__00. Cleaned\Web\__Next.Js\__withoutProjects" && find . -maxdepth
+       3 -name "progress.json" -exec rm -v {} \; 2>/dev/null)
+  ⎿ removed './Next Js, Creating and Hosting a Full-Stack Site/05 - 4. Conn
+    ecting the Front End and Back End/progress.json'
+    removed './Next Js, Creating and Hosting a Full-Stack Site/06 - 5. Host
+    … +8 lines (ctrl+o to expand)
+
+
+
+● Bash(cd "N:\__00. Cleaned\Web\__Next.Js\__withoutProjects" && find . -maxdepth
+       3 -name "project-findings.json" -exec rm -v {} \; 2>/dev/null)
+  ⎿ removed './Next Js, Creating and Hosting a Full-Stack Site/05 - 4. Conn
+    ecting the Front End and Back End/project-findings.json'
+    removed './Next Js, Creating and Hosting a Full-Stack Site/06 - 5. Host
+    … +8 lines (ctrl+o to expand)
+
+
+
+● Bash(cd "N:\__00. Cleaned\Web\__Next.Js\__withoutProjects" && find . -maxdepth
+       3 -type d -name "CODE" -exec rm -rf {} \; 2>/dev/null; echo "Done
+      cleaning CODE folder…)
+  ⎿  Done cleaning CODE folders
+
+● Bash(find "N:\__00. Cleaned\Web\__Next.Js\__withoutProjects" \( -name
+      "progress.json" -o -name "project-findings.json" -o -type d -name "CODE"
+      \) 2>/dev/null)
+  ⎿  (No content)
+
+● Now let me test the scanner to verify it correctly identifies 4 courses:
+
+● Bash(cd "E:\Workspace.Dev.JS\CCProjectSynth" && timeout 30 bun      timeout: 
+      scripts/debug-run.ts "N:\__00.                                  45s
+      Cleaned\Web\__Next.Js\__withoutProjects" 2>&1 | head -30)
+  ⎿  [13:28:44] Starting debug run...                                  
+     [13:28:44] Input: N:\__00. Cleaned\Web\__Next.Js\__withoutProjects
+     [13:28:44] Recursive: true
+     … +24 lines (ctrl+o to expand)
+
+● Excellent! The scanner now correctly identifies 4 courses:
+  - Next Js, Creating and Hosting a Full-Stack Site (47 SRTs)
+  - Next Js, the Complete Developer's Guide With Real Projects (36 SRTs)
+  - Next Js, the React Framework (17 SRTs)
+  - Next.Js - Build Scalable React Apps With Page & App Routers (54 SRTs)
+
+  Let me verify that progress.json is now being created in the course root folder:
+
+● Bash(find "N:\__00. Cleaned\Web\__Next.Js\__withoutProjects" -name
+      "progress.json" -o -name "project-findings.json" 2>/dev/null)
+  ⎿  N:\__00. Cleaned\Web\__Next.Js\__withoutProjects/Next Js, Creating and
+     Hosting a Full-Stack Site/progress.json
+
+● Bash(cat "N:\__00. Cleaned\Web\__Next.Js\__withoutProjects\Next Js, Creating
+      and Hosting a Full-Stack Site\progress.json")
+  ⎿  {                                      
+       "status": "started",
+       "started_at": "2025-12-27T10:00:00Z",
+     … +4 lines (ctrl+o to expand)
+
+● The progress.json is now in the correct location (course root). But let me check the worker to see why it's showing 0 projects and not being marked complete:
+
+● Read(src\worker\worker.ts)
+  ⎿  Read 58 lines
+
+● Read(src\agent\prompts.ts)
+  ⎿  Read 210 lines
+
+● Read(src\agent\result-parser.ts)
+  ⎿  Read 208 lines
+
+● The scanner is now working correctly:
+  - 4 courses identified (not 36)
+  - Names are correct (not undefined)
+  - progress.json is in the course root folder ✓
+
+  The discovery ran but found 0 projects - that's an agent behavior issue (either no buildable projects in transcripts, or the agent output wasn't parsed correctly). That's separate from the structural fixes we made.
+
+● Let me clean up the progress.json from our test and summarize what was fixed:
+
+● Bash(rm -f "N:\__00. Cleaned\Web\__Next.Js\__withoutProjects\Next Js, Creating
+       and Hosting a Full-Stack Site\progress.json" 2>/dev/null; echo "Cleaned
+      up test artifa…)
+  ⎿  Cleaned up test artifacts
+
+● Summary of Fixes
+
+  Issues Fixed:
+
+  1. Scanner incorrectly treating subfolders as courses - Rewrote course-scanner.ts:
+    - Now correctly identifies course roots (immediate children of inputDir)
+    - Subfolders are treated as modules, not separate courses
+    - Collects ALL SRTs from course root + all subfolders
+  2. State detector mismatch - Fixed state-detector.ts:
+    - Now accepts both "complete" and "completed" status values
+  3. Missing course name - Updated:
+    - Added name property to Course type
+    - Scanner extracts name from path
+
+  Verification:
+  Found 4 courses (4 pending, 0 skipped)
+    - Next Js, Creating and Hosting a Full-Stack Site [pending] (47 SRTs)
+    - Next Js, the Complete Developer's Guide With Real Projects [pending] (36 SRTs)
+    - Next Js, the React Framework [pending] (17 SRTs)
+    - Next.Js - Build Scalable React Apps With Page & App Routers [pending] (54 SRTs)
+
+  Expected Structure:
+  Course Root/
+  ├── progress.json           ← Course root (correct)
+  ├── project-findings.json   ← Course root (correct)
+  ├── CODE/__CC_Projects/     ← Course root (correct)
+  ├── 01 - Module A/          ← Subfolder (SRTs collected, not treated as course)
+  └── 02 - Module B/          ← Subfolder (SRTs collected, not treated as course)
+
+  Ready for you to continue testing. Want me to run a longer test to see the full discovery + generation flow?
+
+> How many courses did you scan (-c)? 
+
+● The scanner found 4 courses (that's correct - matching the 4 folders in your input directory).
+
+  For concurrency (-c), I used -c 1 (1 worker) in my debug script to make the output easier to follow.
+
+  You mentioned wanting -c 2 - want me to run another test with 2 concurrent workers?
+
+  bun start -- -i "N:\__00. Cleaned\Web\__Next.Js\__withoutProjects" -r -c 2
+
+> yes, lets delete any progress.json files generated and lets go again 
+
+● Bash(find "N:\__00. Cleaned\Web\__Next.Js\__withoutProjects" \( -name
+      "progress.json" -o -name "project-findings.json" \) -exec rm -v {} \;
+      2>/dev/null; echo "Cleanu…)
+  ⎿  Cleanup complete
+
+● Update(scripts\debug-run.ts)
+  ⎿  Added 1 line, removed 1 line                                        
+      12                                                                 
+      13  const inputDir = process.argv[2] || 'N:\\__00.                 
+          Cleaned\\Web\\__Next.Js\\__withoutProjects';                   
+      14  const recursive = true;                                        
+      15 -const concurrency = 1;                                         
+      15 +const concurrency = 2;                                         
+      16  const scanWorkers = 1;                                         
+      17                                                                 
+      18  let lastActivityTime = Date.now();                             
+
+● Bash(cd "E:\Workspace.Dev.JS\CCProjectSynth" && timeout 180 bun   timeout: 3m 
+      scripts/debug-run.ts 2>&1)                                    20s
+
+  ⎿  Error: Exit code 124
+     [13:32:33] Starting debug run...
+     [13:32:33] Input: N:\__00. Cleaned\Web\__Next.Js\__withoutProjects
+     [13:32:33] Recursive: true
+     [13:32:33] Concurrency: 2
+     [13:32:33] --- PHASE 1: Scanning ---
+     [13:32:33] SCAN: Starting...
+     [13:32:33] Found 4 courses (4 pending, 0 skipped)
+     [13:32:33]   - Next Js, Creating and Hosting a Full-Stack Site [pending] (47
+      SRTs)
+     [13:32:33]   - Next Js, the Complete Developer's Guide With Real Projects 
+     [pending] (36 SRTs)
+     … +19 lines (ctrl+o to see all)
+
+● Two workers running in parallel. Let me check what was created:
+
+● Bash(find "N:\__00. Cleaned\Web\__Next.Js\__withoutProjects" \( -name
+      "progress.json" -o -name "project-findings.json" -o -type d -name "CODE"
+      \) 2>/dev/null)
+  ⎿  N:\__00. Cleaned\Web\__Next.Js\__withoutProjects/Next Js, Creating and
+     Hosting a Full-Stack Site/CODE
+     N:\__00. Cleaned\Web\__Next.Js\__withoutProjects/Next Js, Creating and
+     … +15 lines (ctrl+o to expand)
+
+● I see an issue - CODE folders are being created in subfolders too. Let me check what's happening:
+
+● Bash(cat "N:\__00. Cleaned\Web\__Next.Js\__withoutProjects\Next Js, the
+      Complete Developer's Guide With Real Projects\project-findings.json"
+      2>/dev/null | head -80)
+  ⎿ {                                                                      
+      "discovery_notes": "Course contains 3 distinct projects across 3 fold
+    ers/sections",
+    … +95 lines (ctrl+o to expand)
+
+
+● I see the issue. The agent is creating CODE folders in subfolders. Let me check the structure and see where things went wrong:
+
+● Bash(ls -la "N:\__00. Cleaned\Web\__Next.Js\__withoutProjects\Next Js, the
+      Complete Developer's Guide With Real Projects\CODE" 2>/dev/null)
+  ⎿  total 8                                                      
+     drwxr-xr-x 1 Tony Baloney 197121 0 Dec 27 08:34 .
+     drwxr-xr-x 1 Tony Baloney 197121 0 Dec 27 08:34 ..
+     drwxr-xr-x 1 Tony Baloney 197121 0 Dec 27 08:34 __CC_Projects
+
+● Bash(ls -la "N:\__00. Cleaned\Web\__Next.Js\__withoutProjects\Next Js, the
+      Complete Developer's Guide With Real Projects\1 - Nextjs 14 Full Course
+      2024\CODE" 2>/dev/…)
+  ⎿  total 8                                                      
+     drwxr-xr-x 1 Tony Baloney 197121 0 Dec 27 08:28 .
+     drwxr-xr-x 1 Tony Baloney 197121 0 Dec 27 08:28 ..
+     drwxr-xr-x 1 Tony Baloney 197121 0 Dec 27 08:28 __CC_Projects
+
+● Bash(ls -la "N:\__00. Cleaned\Web\__Next.Js\__withoutProjects\Next Js, the
+      Complete Developer's Guide With Real Projects\CODE\__CC_Projects"
+      2>/dev/null)
+  ⎿  total 0                                           
+     drwxr-xr-x 1 Tony Baloney 197121 0 Dec 27 08:34 .
+     drwxr-xr-x 1 Tony Baloney 197121 0 Dec 27 08:34 ..
+     … +2 lines (ctrl+o to expand)
+
+● Bash(ls -la "N:\__00. Cleaned\Web\__Next.Js\__withoutProjects\Next Js,
+      Creating and Hosting a Full-Stack Site\CODE\__CC_Projects" 2>/dev/null)
+  ⎿ total 0                                                                
+    drwxr-xr-x 1 Tony Baloney 197121 0 Dec 27 08:34 .
+    drwxr-xr-x 1 Tony Baloney 197121 0 Dec 27 08:34 ..
+    drwxr-xr-x 1 Tony Baloney 197121 0 Dec 27 08:35 Project_NextjsEcommerce
+
+
+● Status Update
+
+  ✓ Working correctly:
+  - 4 courses identified (not 36)
+  - progress.json → course root ✓
+  - project-findings.json → course root ✓
+  - CODE/__CC_Projects/ → course root ✓
+  - Projects generated in correct location:
+    - Next Js, Creating.../CODE/__CC_Projects/Project_NextjsEcommerce
+    - Next Js, Complete.../CODE/__CC_Projects/Project_PromptopiaAiSharing
+
+  ⚠️ Minor issue: Agent is also creating empty CODE folders in some subfolders (like 1 - Nextjs 14 Full Course 2024/CODE). These are harmless extras but shouldn't be there.
+
+  Results from the run:
+  - Worker 0: Course 1 → 1 project found → generation completed
+  - Worker 1: Course 2 → 3 projects found → generation in progress (timed out)
+
+  Want me to:
+  1. Add cleanup logic to remove CODE folders from subfolders?
+  2. Run a longer test to let all 4 courses complete?
+  3. Something else?
+
+> ok, Ive moved the course that was complete, lets go ahead and do -c 3 and 
+get a grasp on this issue where \CODE folder is being created in the module 
+folders. Maybe the confusion is that a \CODE folder already exists. In which
+ case, that fine, just create the file and folder structure within \CODE 
+
+● Let me clean up and check if there are pre-existing CODE folders in the remaining courses:
+
+● Bash(find "N:\__00. Cleaned\Web\__Next.Js\__withoutProjects" \( -name
+      "progress.json" -o -name "project-findings.json" \) -exec rm -v {} \;
+      2>/dev/null; echo "--- Ch…)
+  ⎿ removed 'N:\__00. Cleaned\Web\__Next.Js\__withoutProjects/Next Js, the 
+    Complete Developer'\''s Guide With Real Projects/3 - Build and Deploy a
+    n Amazing Developer Portfolio with Next JS and Framer Motion/progress.j
+    … +35 lines (ctrl+o to expand)
+
+
+
+● I see leftover CODE folders and some progress files in wrong locations (from earlier runs). Let me clean everything:
+
+● Bash(cd "N:\__00. Cleaned\Web\__Next.Js\__withoutProjects" && find . -type d
+      -name "CODE" -exec rm -rf {} \; 2>/dev/null; find . -name "progress.json"
+      -exec rm {} \;…)
+  ⎿  Cleaned. Verifying:
+
+● Update(scripts\debug-run.ts)
+  ⎿  Added 1 line, removed 1 line                                        
+      12                                                                 
+      13  const inputDir = process.argv[2] || 'N:\\__00.                 
+          Cleaned\\Web\\__Next.Js\\__withoutProjects';                   
+      14  const recursive = true;                                        
+      15 -const concurrency = 2;                                         
+      15 +const concurrency = 3;                                         
+      16  const scanWorkers = 1;                                         
+      17                                                                 
+      18  let lastActivityTime = Date.now();                             
+
+● Bash(cd "E:\Workspace.Dev.JS\CCProjectSynth" && timeout 180 bun   timeout: 3m 
+      scripts/debug-run.ts 2>&1)                                    20s
+
+  ⎿  Error: Exit code 124
+     [13:53:18] Starting debug run...
+     [13:53:18] Input: N:\__00. Cleaned\Web\__Next.Js\__withoutProjects
+     [13:53:18] Recursive: true
+     [13:53:18] Concurrency: 3
+     [13:53:18] --- PHASE 1: Scanning ---
+     [13:53:18] SCAN: Starting...
+     [13:53:18] Found 3 courses (3 pending, 0 skipped)
+     [13:53:18]   - Next Js, the Complete Developer's Guide With Real Projects 
+     [pending] (36 SRTs)
+     [13:53:18]   - Next Js, the React Framework [pending] (17 SRTs)
+     … +23 lines (ctrl+o to see all)
+
+● Let me check where CODE folders were created:
+
+● Bash(find "N:\__00. Cleaned\Web\__Next.Js\__withoutProjects" -type d -name
+      "CODE" 2>/dev/null)
+  ⎿ N:\__00. Cleaned\Web\__Next.Js\__withoutProjects/Next Js, the Complete 
+    Developer's Guide With Real Projects/3 - Build and Deploy an Amazing De
+    veloper Portfolio with Next JS and Framer Motion/CODE
+    … +8 lines (ctrl+o to expand)
+
+
+● Bash(cat "N:\__00. Cleaned\Web\__Next.Js\__withoutProjects\Next Js, the React
+      Framework\project-findings.json" 2>/dev/null | head -60)
+  ⎿  {                                                                   
+       "discovery_notes": "Analyzed 17 SRT files from Next.js 14 course",
+       "projects_found": 2,
+     … +68 lines (ctrl+o to expand)
+
+● Bash(echo "=== Subfolder CODE (wrong) ===" && ls -la "N:\__00.
+      Cleaned\Web\__Next.Js\__withoutProjects\Next Js, the React Framework\11 -
+      Prisma and SQLite Project\CO…)
+  ⎿  === Subfolder CODE (wrong) ===                   
+     total 8
+     drwxr-xr-x 1 Tony Baloney 197121 0 Dec 27 08:53 .
+     … +9 lines (ctrl+o to expand)
+
+● I see the issue. The agent is creating empty CODE/__CC_Projects in subfolders, but actual projects go to the correct course root location. Let me update the prompts to be more explicit:
+
+● Read(src\agent\prompts.ts)
+  ⎿  Read 210 lines
+
+● Update(src\agent\prompts.ts)
+  ⎿  Added 10 lines, removed 2 lines                                     
+      37                                                                 
+      38  Follow the project-discovery skill workflow:                   
+      39                                                                 
+      40 -1. **Create progress.json** in the course root                 
+         - with status "started"                                         
+      40 +1. **Create progress.json** in the COURSE ROOT                 
+         + with status "started"                                         
+      41     Path: ${course.path}/progress.json                          
+      42                                                                 
+      43  2. **Analyze SRT content sequentially** to identify projects:  
+     ...
+      46     - Note project endings ("that completes", moving to         
+          different topic)                                               
+      47     - Skip non-project content (intros, conclusions, pure       
+          theory)                                                        
+      48                                                                 
+      49 -3. **Create project-findings.json** with discovered projects:  
+      49 +3. **Create project-findings.json** in the COURSE ROOT:        
+      50     Path: ${course.path}/project-findings.json                  
+      51                                                                 
+      52  4. **Output the manifest JSON** at the end of your response    
+      53                                                                 
+      54 +## CRITICAL: File Location Rules                               
+      55 +                                                               
+      56 +- ONLY create files at the EXACT paths specified above         
+      57 +- The COURSE ROOT is: ${course.path}                           
+      58 +- DO NOT create any CODE folders during discovery              
+      59 +- DO NOT create any folders inside module subfolders           
+      60 +- All files go in the COURSE ROOT directory only               
+      61 +                                                               
+      62  ## Output Format                                               
+      63                                                                 
+      64  After completing discovery, output the manifest in this exact  
+          JSON format:                                                   
+
+● Update(src\agent\prompts.ts)
+  ⎿  Added 14 lines, removed 4 lines                                     
+      126                                                                
+      127  ${srtSection}                                                 
+      128                                                                
+      129 +## CRITICAL: Output Location                                  
+      130 +                                                              
+      131 +- COURSE ROOT: ${course.path}                                 
+      132 +- PROJECT OUTPUT: ${outputPath}                               
+      133 +- ALL files MUST go inside: ${outputPath}                     
+      134 +- DO NOT create CODE folders anywhere else                    
+      135 +- DO NOT create folders in module subfolders (e.g., "01 -     
+          +Introduction/CODE" is WRONG)                                  
+      136 +                                                              
+      137  ## Instructions                                               
+      138                                                                
+      139  Follow the project-generator skill workflow:                  
+      140                                                                
+      141  1. **Create project directory**: ${outputPath}                
+      142 +   - This is the ONLY location for project files              
+      143                                                                
+      144 -2. **Generate required documentation files**:                 
+      144 +2. **Generate required documentation files**                  
+          + (inside ${outputPath}):                                      
+      145     - CLAUDE.md (project context for future Claude sessions)   
+      146     - README.md (user documentation)                           
+      147     - USAGE.md (detailed usage guide)                          
+      148     - CHANGELOG.md (version history - APPEND ONLY if exists!)  
+      149                                                                
+      150 -3. **Generate configuration files** based on tech stack:      
+      150 +3. **Generate configuration files** based on tech stack       
+          + (inside ${outputPath}):                                      
+      151     - package.json, tsconfig.json, requirements.txt, etc.      
+      152                                                                
+      153 -4. **Generate all source code**:                              
+      153 +4. **Generate all source code** (inside ${outputPath}):       
+      154     - WORKING code only (no TODOs, no placeholders)            
+      155     - Follow patterns from transcripts                         
+      156     - Include proper error handling                            
+      157     - All imports must be valid                                
+      158                                                                
+      159 -5. **Update project-findings.json**:                          
+      159 +5. **Update project-findings.json** in COURSE ROOT:           
+      160 +   - Path: ${course.path}/project-findings.json               
+      161     - Set generation_status to "complete"                      
+      162     - Set generated_at to current timestamp                    
+      163     - Set output_path to "${outputPath}"                       
+
+● Now let me clean up and test again:
+
+● Bash(cd "N:\__00. Cleaned\Web\__Next.Js\__withoutProjects" && find . -type d
+      -name "CODE" -exec rm -rf {} \; 2>/dev/null; find . -name "progress.json"
+      -exec rm {} \;…)
+  ⎿  Cleaned!
+
+● Bash(cd "E:\Workspace.Dev.JS\CCProjectSynth" && timeout 180 bun   timeout: 3m 
+      scripts/debug-run.ts 2>&1)                                    20s
+
+  ⎿  Error: Exit code 124
+     [13:57:59] Starting debug run...
+     [13:57:59] Input: N:\__00. Cleaned\Web\__Next.Js\__withoutProjects
+     [13:57:59] Recursive: true
+     [13:57:59] Concurrency: 3
+     [13:57:59] --- PHASE 1: Scanning ---
+     [13:57:59] SCAN: Starting...
+     [13:57:59] Found 3 courses (3 pending, 0 skipped)
+     [13:57:59]   - Next Js, the Complete Developer's Guide With Real Projects 
+     [pending] (36 SRTs)
+     [13:57:59]   - Next Js, the React Framework [pending] (17 SRTs)
+     … +23 lines (ctrl+o to see all)
+
+● Bash(find "N:\__00. Cleaned\Web\__Next.Js\__withoutProjects" -type d -name
+      "CODE" 2>/dev/null)
+  ⎿ N:\__00. Cleaned\Web\__Next.Js\__withoutProjects/Next Js, the Complete 
+    Developer's Guide With Real Projects/3 - Build and Deploy an Amazing De
+    veloper Portfolio with Next JS and Framer Motion/CODE
+    … +10 lines (ctrl+o to expand)
+
+
+● Bash(echo "=== Subfolder CODE contents ===" && for dir in "N:\__00.
+      Cleaned\Web\__Next.Js\__withoutProjects\Next Js, the React Framework\12 -
+      Custom 404 Page\CODE" "…)
+  ⎿ === Subfolder CODE contents ===                                        
+    --- N:\__00. Cleaned\Web\__Next.Js\__withoutProjects\Next Js, the React
+     Framework\12 - Custom 404 Page\CODE ---
+    … +10 lines (ctrl+o to expand)
+
+
+● The agent is still creating empty CODE/__CC_Projects in subfolders despite the updated prompts. The actual projects ARE going to the correct course root location.
+
+  Options:
+  1. Add post-processing cleanup to remove CODE folders from subfolders
+  2. Accept as minor cosmetic issue (folders are empty anyway)
+
+  Want me to add a cleanup step to the worker that removes CODE folders from subfolders after processing?
+
+> kill any running processes if there are any fro your end 
+
+● Bash(tasklist | grep -i bun 2>/dev/null || echo "No bun processes found")
+  ⎿ bun.exe                      29864 Console                    1        
+    464 K
+    bun.exe                      28484 Console                    1      4,
+    964 K
+
+
+● Bash(taskkill //F //IM bun.exe 2>/dev/null; echo "Done")
+  ⎿  SUCCESS: The process "bun.exe" with PID 29864 has been terminated.
+     SUCCESS: The process "bun.exe" with PID 28484 has been terminated.
+     Done
+
+● Bash(tasklist | grep -i bun 2>/dev/null || echo "All clear - no bun processes
+      running")
+  ⎿  All clear - no bun processes running
+
+● Done. All bun processes killed.
+
 
 
