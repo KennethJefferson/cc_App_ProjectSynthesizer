@@ -17,7 +17,7 @@ export interface Course {
 }
 
 export interface ProgressFile {
-  status: 'started' | 'complete';
+  status: 'started' | 'complete' | 'completed';
   started_at: string;
   completed_at: string | null;
 }

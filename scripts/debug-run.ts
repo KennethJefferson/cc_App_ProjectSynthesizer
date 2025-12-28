@@ -12,11 +12,11 @@ import type { SynthEvent } from '../src/worker/events';
 
 const inputDir = process.argv[2] || 'N:\\__00. Cleaned\\Web\\__Next.Js\\__withoutProjects';
 const recursive = true;
-const concurrency = 3;
+const concurrency = 1;
 const scanWorkers = 1;
 
 let lastActivityTime = Date.now();
-const INACTIVITY_TIMEOUT = 120_000; // 2 minutes
+const INACTIVITY_TIMEOUT = 1800_000; // 30 minutes - no timeout during generation
 
 function log(msg: string) {
   const now = new Date().toISOString().split('T')[1].split('.')[0];

@@ -7,6 +7,8 @@
  */
 
 import { query } from '@anthropic-ai/claude-agent-sdk';
+import { existsSync } from 'fs';
+import { join } from 'path';
 import type {
   Course,
   SrtFile,
@@ -22,6 +24,7 @@ import {
   getGeneratorSystemPrompt,
 } from './prompts';
 import { parseDiscoveryResult, parseGeneratorResult } from './result-parser';
+import { readJsonFile } from '../utils/file';
 import type { SynthEventEmitter } from '../worker/events';
 
 /**
@@ -47,8 +50,20 @@ export async function runCourseAgent(
 ): Promise<AgentResult> {
   const errors: string[] = [];
 
-  // Phase 1: Discovery
-  const discoveryResult = await runDiscoveryAgent(course, srtContents);
+  // Phase 1: Discovery (check for existing manifest first)
+  let discoveryResult: DiscoveryResult;
+  const existingManifestPath = join(course.path, 'project-findings.json');
+
+  if (existsSync(existingManifestPath)) {
+    // Use existing manifest - skip discovery phase
+    if (process.env.DEBUG) {
+      console.log(`[Discovery] Using existing manifest: ${existingManifestPath}`);
+    }
+    discoveryResult = parseDiscoveryResult('', course.path);
+  } else {
+    // Run discovery
+    discoveryResult = await runDiscoveryAgent(course, srtContents);
+  }
 
   // Emit discovery complete
   if (workerId !== undefined && eventEmitter) {
@@ -142,13 +157,10 @@ async function runDiscoveryAgent(
       prompt,
       options: {
         cwd: course.path,
-        allowedTools: ['Read', 'Write', 'Glob', 'Grep'],
         permissionMode: 'acceptEdits',
-        systemPrompt: {
-          type: 'preset',
-          preset: 'claude_code',
-          append: getDiscoverySystemPrompt(),
-        },
+        settingSources: ['user', 'project'],
+        allowedTools: ['Skill', 'Read', 'Write', 'Glob', 'Grep', 'Edit', 'Bash'],
+        systemPrompt: getDiscoverySystemPrompt(),
       },
     });
 
@@ -156,11 +168,22 @@ async function runDiscoveryAgent(
     let lastError: string | null = null;
 
     for await (const message of result) {
+      // Debug: log all messages
+      if (process.env.DEBUG) {
+        console.log('[Discovery] Message:', JSON.stringify(message, null, 2).slice(0, 500));
+      }
+
       if (message.type === 'result') {
         if (message.subtype === 'success') {
           finalResultText = message.result;
+          if (process.env.DEBUG) {
+            console.log('[Discovery] Final result:', finalResultText?.slice(0, 1000));
+          }
         } else {
           lastError = (message as any).errors?.join(', ') || 'Unknown error';
+          if (process.env.DEBUG) {
+            console.log('[Discovery] Error:', lastError);
+          }
         }
       }
     }
@@ -202,6 +225,13 @@ async function runGeneratorAgent(
     project.source_srts.includes(srt.filename)
   );
 
+  if (process.env.DEBUG) {
+    console.log(`[Generator] Project: ${project.synthesized_name}`);
+    console.log(`[Generator] Project source_srts (${project.source_srts.length}):`, project.source_srts.slice(0, 5));
+    console.log(`[Generator] All SRT filenames (${allSrtContents.length}):`, allSrtContents.map(s => s.filename).slice(0, 5));
+    console.log(`[Generator] Matched SRTs: ${relevantSrts.length}`);
+  }
+
   const prompt = buildGeneratorPrompt(course, project, relevantSrts);
 
   try {
@@ -209,13 +239,10 @@ async function runGeneratorAgent(
       prompt,
       options: {
         cwd: course.path,
-        allowedTools: ['Read', 'Write', 'Edit', 'Bash', 'Glob'],
         permissionMode: 'acceptEdits',
-        systemPrompt: {
-          type: 'preset',
-          preset: 'claude_code',
-          append: getGeneratorSystemPrompt(),
-        },
+        settingSources: ['user', 'project'],
+        allowedTools: ['Skill', 'Read', 'Write', 'Glob', 'Grep', 'Edit', 'Bash'],
+        systemPrompt: getGeneratorSystemPrompt(),
       },
     });
 
@@ -223,35 +250,36 @@ async function runGeneratorAgent(
     let lastError: string | null = null;
 
     for await (const message of result) {
+      // Debug: log all messages for generator
+      if (process.env.DEBUG) {
+        console.log('[Generator] Message:', JSON.stringify(message, null, 2).slice(0, 500));
+      }
+
       if (message.type === 'result') {
         if (message.subtype === 'success') {
           finalResultText = message.result;
+          if (process.env.DEBUG) {
+            console.log('[Generator] Final result:', finalResultText?.slice(0, 1000));
+          }
         } else {
           lastError = (message as any).errors?.join(', ') || 'Unknown error';
+          if (process.env.DEBUG) {
+            console.log('[Generator] Error:', lastError);
+          }
         }
       }
     }
 
-    if (finalResultText) {
-      return parseGeneratorResult(finalResultText, project.synthesized_name);
-    }
-
-    return {
-      project_name: project.synthesized_name,
-      output_path: '',
-      files_created: [],
-      status: 'failed',
-      errors: [lastError || 'Generator returned no result'],
-    };
+    // Always check filesystem first, then fall back to text parsing
+    return parseGeneratorResult(
+      finalResultText || '',
+      project.synthesized_name,
+      course.path
+    );
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : String(error);
 
-    return {
-      project_name: project.synthesized_name,
-      output_path: '',
-      files_created: [],
-      status: 'failed',
-      errors: [errorMsg],
-    };
+    // Even on error, check if project was created on disk
+    return parseGeneratorResult('', project.synthesized_name, course.path);
   }
 }

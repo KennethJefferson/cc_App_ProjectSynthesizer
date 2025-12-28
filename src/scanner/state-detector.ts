@@ -20,6 +20,9 @@ export function detectCourseState(coursePath: string): CourseState {
   const progressPath = join(coursePath, 'progress.json');
   const ccProjectsPath = join(coursePath, 'CODE', '__CC_Projects');
 
+  // Check for __CC_Projects folder - this is the definitive "done" indicator
+  const hasProjects = existsSync(ccProjectsPath);
+
   // Check for progress.json
   if (existsSync(progressPath)) {
     const progress = readProgressFile(coursePath);
@@ -27,7 +30,12 @@ export function detectCourseState(coursePath: string): CourseState {
     if (progress) {
       // Accept both 'complete' and 'completed' (agents may use either)
       if (progress.status === 'complete' || progress.status === 'completed') {
-        return 'skipped'; // Already done
+        // Only skip if projects were actually generated
+        if (hasProjects) {
+          return 'skipped'; // Fully done - discovery + generation complete
+        }
+        // Discovery done but generation not done - restart generation
+        return 'pending';
       } else {
         // Status is "started" - incomplete, need to restart
         cleanupIncompleteCourse(coursePath);
@@ -40,8 +48,8 @@ export function detectCourseState(coursePath: string): CourseState {
     }
   }
 
-  // No progress.json, check for __CC_Projects folder
-  if (existsSync(ccProjectsPath)) {
+  // No progress.json, but check for __CC_Projects folder
+  if (hasProjects) {
     // Assume complete if folder exists (user may have manually deleted progress.json)
     return 'skipped';
   }
