@@ -46,6 +46,13 @@ import { readJsonFile } from '../utils/file';
 import type { SynthEventEmitter } from '../worker/events';
 
 /**
+ * Extract basename from a path (handles both / and \ separators)
+ */
+function getBasename(filepath: string): string {
+  return filepath.split(/[/\\]/).pop() || filepath;
+}
+
+/**
  * Combined agent result interface
  */
 interface AgentResult {
@@ -255,9 +262,13 @@ async function runGeneratorAgent(
   allSrtContents: SrtFile[]
 ): Promise<GeneratedProject> {
   // Filter to only relevant SRTs for this project
-  const relevantSrts = allSrtContents.filter(srt =>
-    project.source_srts.includes(srt.filename)
-  );
+  // Compare basenames since manifest may have just filename while scanner has relative paths
+  const relevantSrts = allSrtContents.filter(srt => {
+    const srtBasename = getBasename(srt.filename);
+    return project.source_srts.some(sourceSrt =>
+      getBasename(sourceSrt) === srtBasename
+    );
+  });
 
   if (process.env.DEBUG) {
     console.log(`[Generator] Project: ${project.synthesized_name}`);
@@ -336,9 +347,13 @@ async function runLargeProjectGeneration(
   const projectName = project.synthesized_name;
 
   // Filter to relevant SRTs
-  const relevantSrts = allSrtContents.filter((srt) =>
-    project.source_srts.includes(srt.filename)
-  );
+  // Compare basenames since manifest may have just filename while scanner has relative paths
+  const relevantSrts = allSrtContents.filter((srt) => {
+    const srtBasename = getBasename(srt.filename);
+    return project.source_srts.some(sourceSrt =>
+      getBasename(sourceSrt) === srtBasename
+    );
+  });
 
   if (process.env.DEBUG) {
     console.log(`[LargeProject] Starting: ${projectName}`);

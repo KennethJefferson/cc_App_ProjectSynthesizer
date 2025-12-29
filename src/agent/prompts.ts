@@ -44,7 +44,17 @@ export function buildDiscoveryPrompt(course: Course, srtFilePaths: string[]): st
 ## SRT File Structure
 ${folderOverview}
 
-Follow the project-discovery skill workflow to analyze transcripts and create progress.json and project-findings.json files.`;
+## CRITICAL: Output Location
+
+All output files MUST be written to the course path: \`${course.path}\`
+
+Write these files using ABSOLUTE paths:
+- \`${course.path}/progress.json\` - Status tracking (create FIRST)
+- \`${course.path}/project-findings.json\` - Discovery manifest
+
+DO NOT write files relative to cwd or any other location. Use the exact absolute paths above.
+
+Follow the project-discovery skill workflow to analyze transcripts.`;
 }
 
 /**
@@ -69,13 +79,26 @@ export function buildGeneratorPrompt(
 - **Description**: ${project.description}
 - **Tech Stack**: ${project.tech_stack.join(', ')}
 - **Complexity**: ${project.complexity}
-- **Output Path**: ${outputPath}
+
+## CRITICAL: Output Location
+
+All project files MUST be written to this ABSOLUTE path: \`${outputPath}\`
+
+Create the directory if it doesn't exist, then write all files there:
+- \`${outputPath}/README.md\`
+- \`${outputPath}/USAGE.md\`
+- \`${outputPath}/CHANGELOG.md\`
+- \`${outputPath}/CLAUDE.md\`
+- \`${outputPath}/package.json\`
+- \`${outputPath}/src/...\` (source files)
+
+DO NOT write files relative to cwd or any other location. Use ABSOLUTE paths starting with \`${outputPath}\`.
 
 ## Source Transcripts
 
 ${srtSection}
 
-Generate this project following the project-generator skill workflow. Ensure all required documentation files (CLAUDE.md, README.md, USAGE.md, CHANGELOG.md) are created.`;
+Generate this project following the project-generator skill workflow.`;
 }
 
 /**
@@ -119,6 +142,8 @@ export function buildArchitectPrompt(
   project: ProjectEntry,
   srtFilePaths: string[]
 ): string {
+  const archSpecPath = `${course.path}/architecture-${project.synthesized_name}.json`;
+
   return `Extract the architecture specification for project "${project.synthesized_name}" by analyzing the source transcripts.
 
 ## Project Information
@@ -127,7 +152,12 @@ export function buildArchitectPrompt(
 - **Description**: ${project.description}
 - **Tech Stack**: ${project.tech_stack.join(', ')}
 - **Complexity**: ${project.complexity}
-- **Course Path**: ${course.path}
+
+## CRITICAL: Output Location
+
+Write the architecture spec to this ABSOLUTE path: \`${archSpecPath}\`
+
+DO NOT write files relative to cwd or any other location. Use the exact absolute path above.
 
 ## Source Transcripts (${srtFilePaths.length} files)
 ${srtFilePaths.map(f => `- ${f}`).join('\n')}
@@ -144,8 +174,7 @@ ${srtFilePaths.map(f => `- ${f}`).join('\n')}
    - Environment variables needed
    - Key implementation patterns used in the teaching
 
-3. Create an architecture spec file at:
-   \`${course.path}/architecture-${project.synthesized_name}.json\`
+3. Write the architecture spec file to: \`${archSpecPath}\`
 
 4. The spec should be detailed enough that a generator can build each file
    WITHOUT needing the full transcript context
@@ -222,12 +251,17 @@ ${architectureSpec.file_structure
 ${architectureSpec.file_structure.length - previouslyGeneratedFiles.length > 20 ? `\n... and ${architectureSpec.file_structure.length - previouslyGeneratedFiles.length - 20} more` : ''}
 `;
 
-  return `Generate code for project "${project.synthesized_name}" - Chunk ${chunkIndex + 1} of ${totalChunks}.
+  return `Use the project-generator skill to generate code for project "${project.synthesized_name}" - Chunk ${chunkIndex + 1} of ${totalChunks}.
 
 ## Project Information
 - **Name**: ${project.synthesized_name}
-- **Output Path**: ${outputPath}
 - **Tech Stack**: ${project.tech_stack.join(', ')}
+
+## CRITICAL: Output Location
+
+All project files MUST be written to this ABSOLUTE path: \`${outputPath}\`
+
+DO NOT write files relative to cwd or any other location. Use ABSOLUTE paths starting with \`${outputPath}\`.
 
 ${specSummary}
 
@@ -237,22 +271,25 @@ ${srtSection}
 
 ## Instructions
 
-1. Read the transcript chunk above
-2. Identify which files from the architecture spec are covered in THIS chunk
-3. Generate those files following the build order where possible
-4. Use the architecture spec for consistent naming, patterns, and structure
-5. If a file depends on one not yet generated, create a stub/interface
-
-Write files to: ${outputPath}/
+Based on this chunk:
+1. Identify which files from the architecture spec are covered in THIS chunk
+2. Generate those files following the build order where possible
+3. Use the architecture spec for consistent naming, patterns, and structure
+4. If a file depends on one not yet generated, create a stub/interface
 
 IMPORTANT:
 - Only generate files that have implementation details in THIS chunk
 - Follow the architecture spec for consistency with other chunks
 - Include proper imports (even for files not yet created)
 - Mark any TODOs for details that will come in later chunks
+- Write ALL files to \`${outputPath}/\` using absolute paths
 ${chunkIndex === totalChunks - 1 ? `
 ### Final Chunk - Complete Documentation
-Since this is the LAST chunk, also create all documentation files per the project-generator skill (CLAUDE.md, README.md, USAGE.md, CHANGELOG.md).
+Since this is the LAST chunk, also create all documentation files:
+- \`${outputPath}/CLAUDE.md\`
+- \`${outputPath}/README.md\`
+- \`${outputPath}/USAGE.md\`
+- \`${outputPath}/CHANGELOG.md\`
 ` : ''}`;
 }
 
@@ -276,9 +313,9 @@ The architecture spec you produce will guide code generation in chunks, so it mu
  * System prompt for chunked generation phase
  */
 export function getChunkedGeneratorSystemPrompt(): string {
-  return `You are implementing a project based on an architecture specification and transcript chunks.
+  return `You have access to the project-generator skill which knows how to create complete working projects from transcripts. Use it when asked to generate or build projects.
 
-Key rules:
+When generating chunked projects:
 - Follow the architecture spec for file structure and naming
 - Only implement code that has details in the current chunk
 - Create proper imports even for files not yet generated
