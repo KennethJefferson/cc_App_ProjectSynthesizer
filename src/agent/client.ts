@@ -680,6 +680,9 @@ export async function runGitHubIntegration(
     // Initialize git repo
     await execCommand('git init', projectPath);
 
+    // Enable long paths for Windows (prevents failures with deep Java package structures)
+    await execCommand('git config core.longpaths true', projectPath);
+
     // Add all files
     await execCommand('git add .', projectPath);
 
