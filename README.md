@@ -13,6 +13,9 @@ CCProjectSynth scans course directories containing SRT transcript files, analyze
 - **Persistent Manifest**: `project-findings.json` enables selective/deferred generation
 - **Automatic Project Discovery**: Analyzes course transcripts to identify hands-on projects
 - **Complete Code Generation**: Creates working implementations, not placeholders
+- **Automatic GitHub Integration**: Pushes generated projects to GitHub automatically
+  - Creates public repos with `ccg_` prefix (e.g., `ccg_ReactTodoApp`)
+  - Gracefully skips if GitHub CLI not authenticated (with warning)
 - **Parallel Processing**: Process multiple courses and projects concurrently
 - **Graceful Shutdown**: Ctrl+C completes current work before exiting
 - **Resume Support**: Automatically skips already-completed courses
@@ -24,6 +27,7 @@ CCProjectSynth scans course directories containing SRT transcript files, analyze
 - Required skills installed:
   - `project-discovery`
   - `project-generator`
+- (Optional) [GitHub CLI](https://cli.github.com/) (`gh`) installed and authenticated for auto-push
 
 ## Installation
 
@@ -83,6 +87,10 @@ CCProjectSynth uses a two-skill pipeline powered by the Claude Agent SDK:
 │  ┌──────┐   ┌──────┐                                        │
 │  │ gen  │   │ gen  │  ← Parallel generation per project     │
 │  │ P1   │   │ P2   │                                        │
+│  └──┬───┘   └──┬───┘                                        │
+│     ▼          ▼                                            │
+│  ┌──────┐   ┌──────┐                                        │
+│  │GitHub│   │GitHub│  ← Auto-push to GitHub (if gh auth'd)  │
 │  └──────┘   └──────┘                                        │
 │                                                             │
 └─────────────────────────────────────────────────────────────┘

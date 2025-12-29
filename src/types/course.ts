@@ -77,6 +77,15 @@ export interface DiscoveryResult {
 }
 
 /**
+ * GitHub push status for generated projects
+ */
+export interface GitHubStatus {
+  status: 'pushed' | 'skipped' | 'failed';
+  repo_url?: string;
+  error?: string;
+}
+
+/**
  * Result from generating a single project
  */
 export interface GeneratedProject {
@@ -85,6 +94,7 @@ export interface GeneratedProject {
   files_created: string[];
   status: 'success' | 'partial' | 'failed';
   errors: string[];
+  github?: GitHubStatus;
 }
 
 /**

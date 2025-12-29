@@ -126,16 +126,19 @@ export async function runCourseAgent(
       // Check if this is a large project requiring chunked generation
       const isLargeProject = project.source_srts.length > LARGE_PROJECT_THRESHOLD;
 
+      let result: GeneratedProject;
       if (isLargeProject) {
         if (process.env.DEBUG) {
           console.log(`[Generator] Large project detected: ${project.synthesized_name} (${project.source_srts.length} SRTs)`);
         }
-        const result = await runLargeProjectGeneration(course, project, srtContents);
-        projectsGenerated.push(result);
+        result = await runLargeProjectGeneration(course, project, srtContents);
       } else {
-        const result = await runGeneratorAgent(course, project, srtContents);
-        projectsGenerated.push(result);
+        result = await runGeneratorAgent(course, project, srtContents);
       }
+
+      // Run GitHub integration after successful generation
+      await runGitHubIntegration(result, workerId, eventEmitter);
+      projectsGenerated.push(result);
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : String(error);
       errors.push(`Failed to generate ${project.synthesized_name}: ${errorMsg}`);
@@ -565,6 +568,156 @@ async function runChunkedGenerator(
       status: 'failed',
       errors: [`Chunk ${chunk.index + 1} error: ${errorMsg}`],
     };
+  }
+}
+
+/**
+ * Convert project name to GitHub repo name
+ * "Project_ReactTodoApp" → "ccg_ReactTodoApp"
+ */
+function convertToRepoName(projectName: string): string {
+  const stripped = projectName.replace(/^Project_/, '');
+  return `ccg_${stripped}`;
+}
+
+/**
+ * Execute a shell command and return result
+ */
+async function execCommand(
+  command: string,
+  cwd?: string
+): Promise<{ success: boolean; stdout: string; stderr: string }> {
+  try {
+    const proc = Bun.spawn(['sh', '-c', command], {
+      cwd,
+      stdout: 'pipe',
+      stderr: 'pipe',
+    });
+
+    const stdout = await new Response(proc.stdout).text();
+    const stderr = await new Response(proc.stderr).text();
+    const exitCode = await proc.exited;
+
+    return { success: exitCode === 0, stdout, stderr };
+  } catch (error) {
+    return {
+      success: false,
+      stdout: '',
+      stderr: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
+/**
+ * Run GitHub integration after project generation
+ * - Check if gh CLI is installed and authenticated
+ * - Initialize git repo, commit, create GitHub repo, and push
+ */
+export async function runGitHubIntegration(
+  generatedProject: GeneratedProject,
+  workerId?: number,
+  eventEmitter?: SynthEventEmitter
+): Promise<void> {
+  // Skip if project failed to generate or has no output path
+  if (generatedProject.status === 'failed' || !generatedProject.output_path) {
+    return;
+  }
+
+  const projectPath = generatedProject.output_path;
+  const repoName = convertToRepoName(generatedProject.project_name);
+
+  // Emit start event
+  if (workerId !== undefined && eventEmitter) {
+    eventEmitter.emit({
+      type: 'worker:github:start',
+      workerId,
+      projectName: generatedProject.project_name,
+    });
+  }
+
+  // Check if gh CLI is installed
+  const ghVersionResult = await execCommand('gh --version');
+  if (!ghVersionResult.success) {
+    const reason = 'GitHub CLI (gh) not installed';
+    console.log('\x1b[33m[GitHub] ' + reason + ' - skipping repo creation.\x1b[0m');
+    generatedProject.github = { status: 'skipped', error: reason };
+    if (workerId !== undefined && eventEmitter) {
+      eventEmitter.emit({ type: 'worker:github:skipped', workerId, reason });
+    }
+    return;
+  }
+
+  // Check if user is authenticated
+  const authResult = await execCommand('gh auth status');
+  if (!authResult.success) {
+    const reason = 'Not logged in to GitHub CLI';
+    console.log('\x1b[33m[GitHub] ' + reason + " - skipping repo creation. Run 'gh auth login' to enable.\x1b[0m");
+    generatedProject.github = { status: 'skipped', error: reason };
+    if (workerId !== undefined && eventEmitter) {
+      eventEmitter.emit({ type: 'worker:github:skipped', workerId, reason });
+    }
+    return;
+  }
+
+  try {
+    // Initialize git repo
+    await execCommand('git init', projectPath);
+
+    // Add all files
+    await execCommand('git add .', projectPath);
+
+    // Create initial commit
+    await execCommand('git commit -m "Init commit"', projectPath);
+
+    // Create GitHub repo and push
+    const createResult = await execCommand(
+      `gh repo create "${repoName}" --public --source . --push --description "Auto-generated from course transcripts by CCProjectSynth"`,
+      projectPath
+    );
+
+    if (!createResult.success) {
+      const error = createResult.stderr || 'Failed to create GitHub repo';
+      generatedProject.github = { status: 'failed', error };
+      if (workerId !== undefined && eventEmitter) {
+        eventEmitter.emit({
+          type: 'worker:github:failed',
+          workerId,
+          projectName: generatedProject.project_name,
+          error,
+        });
+      }
+      return;
+    }
+
+    // Extract repo URL from output or construct it
+    const repoUrlMatch = createResult.stdout.match(/https:\/\/github\.com\/[^\s]+/);
+    const repoUrl = repoUrlMatch ? repoUrlMatch[0] : `https://github.com/${repoName}`;
+
+    generatedProject.github = { status: 'pushed', repo_url: repoUrl };
+
+    if (workerId !== undefined && eventEmitter) {
+      eventEmitter.emit({
+        type: 'worker:github:complete',
+        workerId,
+        projectName: generatedProject.project_name,
+        repoUrl,
+      });
+    }
+
+    if (process.env.DEBUG) {
+      console.log(`[GitHub] Successfully created repo: ${repoUrl}`);
+    }
+  } catch (error) {
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    generatedProject.github = { status: 'failed', error: errorMsg };
+    if (workerId !== undefined && eventEmitter) {
+      eventEmitter.emit({
+        type: 'worker:github:failed',
+        workerId,
+        projectName: generatedProject.project_name,
+        error: errorMsg,
+      });
+    }
   }
 }
 

@@ -26,6 +26,11 @@ export type SynthEvent =
   | { type: 'worker:complete'; workerId: number; result: CourseResult }
   | { type: 'worker:error'; workerId: number; error: string; coursePath: string }
   | { type: 'worker:idle'; workerId: number }
+  // GitHub events
+  | { type: 'worker:github:start'; workerId: number; projectName: string }
+  | { type: 'worker:github:complete'; workerId: number; projectName: string; repoUrl: string }
+  | { type: 'worker:github:skipped'; workerId: number; reason: string }
+  | { type: 'worker:github:failed'; workerId: number; projectName: string; error: string }
   // Stats
   | { type: 'stats:update'; stats: PoolStats }
   // Shutdown

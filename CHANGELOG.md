@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.0] - 2025-12-29
+
+### Added
+
+- **Automatic GitHub Integration**: Projects are automatically pushed to GitHub after generation
+  - Creates public repositories with `ccg_` prefix naming convention
+  - Auto-generates repo description: "Auto-generated from course transcripts by CCProjectSynth"
+  - Graceful fallback: Shows yellow warning if GitHub CLI not installed or not authenticated
+  - New TUI events for GitHub status: `worker:github:start`, `worker:github:complete`, `worker:github:skipped`, `worker:github:failed`
+- New `github` field in `GeneratedProject` type tracking push status and repo URL
+- New `GitHubStatus` interface for tracking GitHub push results
+
+### Technical Details
+
+- Uses `gh-repo` skill workflow: check auth → git init → commit → create repo → push
+- Repo naming: strips `Project_` prefix, adds `ccg_` prefix (e.g., `Project_ReactTodoApp` → `ccg_ReactTodoApp`)
+- New helper functions in `src/agent/client.ts`: `runGitHubIntegration()`, `convertToRepoName()`, `execCommand()`
+
 ## [1.1.0] - 2025-12-27
 
 ### Added
@@ -72,6 +90,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - TypeScript with strict mode enabled
 - ESM module format
 
-[Unreleased]: https://github.com/user/ccprojectsynth/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/user/ccprojectsynth/compare/v1.2.0...HEAD
+[1.2.0]: https://github.com/user/ccprojectsynth/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/user/ccprojectsynth/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/user/ccprojectsynth/releases/tag/v1.0.0
