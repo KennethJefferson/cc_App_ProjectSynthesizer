@@ -33,7 +33,7 @@ export function buildDiscoveryPrompt(course: Course, srtFilePaths: string[]): st
     .map(([folder, files]) => `  - ${folder}/ (${files.length} files)`)
     .join('\n');
 
-  return `Discover projects in this course by analyzing the transcript files.
+  return `Use the project-discovery skill to discover projects in this course.
 
 ## Course Information
 - **Course Path**: ${course.path}
@@ -44,17 +44,7 @@ export function buildDiscoveryPrompt(course: Course, srtFilePaths: string[]): st
 ## SRT File Structure
 ${folderOverview}
 
-## Instructions
-
-1. Use Glob to find all .srt files: \`**/*.srt\`
-2. Read representative SRT files from each section to understand the course content
-3. For large courses (50+ SRTs), sample strategically rather than reading all files
-4. Identify buildable code projects taught in the course
-5. Create these files in the course root (${course.path}/):
-   - progress.json with status tracking
-   - project-findings.json with discovered projects
-
-Focus on finding hands-on coding projects, not just theoretical content.`;
+Follow the project-discovery skill workflow to analyze transcripts and create progress.json and project-findings.json files.`;
 }
 
 /**
@@ -72,7 +62,7 @@ export function buildGeneratorPrompt(
 
   const outputPath = `${course.path}/CODE/__CC_Projects/${project.synthesized_name}`;
 
-  return `Generate project ${project.synthesized_name} from the following transcripts.
+  return `Use the project-generator skill to generate project "${project.synthesized_name}" from the following transcripts.
 
 ## Project Specification
 - **Name**: ${project.synthesized_name}
@@ -85,7 +75,7 @@ export function buildGeneratorPrompt(
 
 ${srtSection}
 
-Create this project in ${outputPath}/ with complete documentation and working source code.`;
+Generate this project following the project-generator skill workflow. Ensure all required documentation files (CLAUDE.md, README.md, USAGE.md, CHANGELOG.md) are created.`;
 }
 
 /**
@@ -259,7 +249,11 @@ IMPORTANT:
 - Only generate files that have implementation details in THIS chunk
 - Follow the architecture spec for consistency with other chunks
 - Include proper imports (even for files not yet created)
-- Mark any TODOs for details that will come in later chunks`;
+- Mark any TODOs for details that will come in later chunks
+${chunkIndex === totalChunks - 1 ? `
+### Final Chunk - Complete Documentation
+Since this is the LAST chunk, also create all documentation files per the project-generator skill (CLAUDE.md, README.md, USAGE.md, CHANGELOG.md).
+` : ''}`;
 }
 
 /**

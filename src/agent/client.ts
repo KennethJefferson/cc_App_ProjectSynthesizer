@@ -189,7 +189,7 @@ async function runDiscoveryAgent(
       options: {
         cwd: course.path,
         permissionMode: 'acceptEdits',
-        settingSources: ['user', 'project'],
+        settingSources: ['user'],
         allowedTools: ['Skill', 'Read', 'Write', 'Glob', 'Grep', 'Edit', 'Bash'],
         systemPrompt: getDiscoverySystemPrompt(),
       },
@@ -271,7 +271,7 @@ async function runGeneratorAgent(
       options: {
         cwd: course.path,
         permissionMode: 'acceptEdits',
-        settingSources: ['user', 'project'],
+        settingSources: ['user'],
         allowedTools: ['Skill', 'Read', 'Write', 'Glob', 'Grep', 'Edit', 'Bash'],
         systemPrompt: getGeneratorSystemPrompt(),
       },
@@ -460,7 +460,7 @@ async function runArchitectAgent(
       options: {
         cwd: course.path,
         permissionMode: 'acceptEdits',
-        settingSources: ['user', 'project'],
+        settingSources: ['user'],
         allowedTools: ['Skill', 'Read', 'Write', 'Glob', 'Grep'],
         systemPrompt: getArchitectSystemPrompt(),
       },
@@ -529,7 +529,7 @@ async function runChunkedGenerator(
       options: {
         cwd: course.path,
         permissionMode: 'acceptEdits',
-        settingSources: ['user', 'project'],
+        settingSources: ['user'],
         allowedTools: ['Skill', 'Read', 'Write', 'Glob', 'Grep', 'Edit', 'Bash'],
         systemPrompt: getChunkedGeneratorSystemPrompt(),
       },
