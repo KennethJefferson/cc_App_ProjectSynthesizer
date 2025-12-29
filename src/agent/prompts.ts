@@ -33,7 +33,7 @@ export function buildDiscoveryPrompt(course: Course, srtFilePaths: string[]): st
     .map(([folder, files]) => `  - ${folder}/ (${files.length} files)`)
     .join('\n');
 
-  return `Use the project-discovery skill to discover projects in this course.
+  return `Discover projects in this course.
 
 ## Course Information
 - **Course Path**: ${course.path}
@@ -44,17 +44,7 @@ export function buildDiscoveryPrompt(course: Course, srtFilePaths: string[]): st
 ## SRT File Structure
 ${folderOverview}
 
-## CRITICAL: Output Location
-
-All output files MUST be written to the course path: \`${course.path}\`
-
-Write these files using ABSOLUTE paths:
-- \`${course.path}/progress.json\` - Status tracking (create FIRST)
-- \`${course.path}/project-findings.json\` - Discovery manifest
-
-DO NOT write files relative to cwd or any other location. Use the exact absolute paths above.
-
-Follow the project-discovery skill workflow to analyze transcripts.`;
+Analyze these transcripts to find buildable projects. Create progress.json and project-findings.json in the course root folder (${course.path}/).`;
 }
 
 /**
@@ -72,33 +62,20 @@ export function buildGeneratorPrompt(
 
   const outputPath = `${course.path}/CODE/__CC_Projects/${project.synthesized_name}`;
 
-  return `Use the project-generator skill to generate project "${project.synthesized_name}" from the following transcripts.
+  return `Generate project ${project.synthesized_name} from the following transcripts.
 
 ## Project Specification
 - **Name**: ${project.synthesized_name}
 - **Description**: ${project.description}
 - **Tech Stack**: ${project.tech_stack.join(', ')}
 - **Complexity**: ${project.complexity}
-
-## CRITICAL: Output Location
-
-All project files MUST be written to this ABSOLUTE path: \`${outputPath}\`
-
-Create the directory if it doesn't exist, then write all files there:
-- \`${outputPath}/README.md\`
-- \`${outputPath}/USAGE.md\`
-- \`${outputPath}/CHANGELOG.md\`
-- \`${outputPath}/CLAUDE.md\`
-- \`${outputPath}/package.json\`
-- \`${outputPath}/src/...\` (source files)
-
-DO NOT write files relative to cwd or any other location. Use ABSOLUTE paths starting with \`${outputPath}\`.
+- **Output Path**: ${outputPath}
 
 ## Source Transcripts
 
 ${srtSection}
 
-Generate this project following the project-generator skill workflow.`;
+Create this project in ${outputPath}/ with complete documentation and working source code.`;
 }
 
 /**
@@ -152,12 +129,7 @@ export function buildArchitectPrompt(
 - **Description**: ${project.description}
 - **Tech Stack**: ${project.tech_stack.join(', ')}
 - **Complexity**: ${project.complexity}
-
-## CRITICAL: Output Location
-
-Write the architecture spec to this ABSOLUTE path: \`${archSpecPath}\`
-
-DO NOT write files relative to cwd or any other location. Use the exact absolute path above.
+- **Output Path**: ${archSpecPath}
 
 ## Source Transcripts (${srtFilePaths.length} files)
 ${srtFilePaths.map(f => `- ${f}`).join('\n')}
@@ -174,7 +146,7 @@ ${srtFilePaths.map(f => `- ${f}`).join('\n')}
    - Environment variables needed
    - Key implementation patterns used in the teaching
 
-3. Write the architecture spec file to: \`${archSpecPath}\`
+3. Write the architecture spec file to ${archSpecPath}
 
 4. The spec should be detailed enough that a generator can build each file
    WITHOUT needing the full transcript context
@@ -251,17 +223,12 @@ ${architectureSpec.file_structure
 ${architectureSpec.file_structure.length - previouslyGeneratedFiles.length > 20 ? `\n... and ${architectureSpec.file_structure.length - previouslyGeneratedFiles.length - 20} more` : ''}
 `;
 
-  return `Use the project-generator skill to generate code for project "${project.synthesized_name}" - Chunk ${chunkIndex + 1} of ${totalChunks}.
+  return `Generate code for project "${project.synthesized_name}" - Chunk ${chunkIndex + 1} of ${totalChunks}.
 
 ## Project Information
 - **Name**: ${project.synthesized_name}
 - **Tech Stack**: ${project.tech_stack.join(', ')}
-
-## CRITICAL: Output Location
-
-All project files MUST be written to this ABSOLUTE path: \`${outputPath}\`
-
-DO NOT write files relative to cwd or any other location. Use ABSOLUTE paths starting with \`${outputPath}\`.
+- **Output Path**: ${outputPath}
 
 ${specSummary}
 
@@ -277,19 +244,14 @@ Based on this chunk:
 3. Use the architecture spec for consistent naming, patterns, and structure
 4. If a file depends on one not yet generated, create a stub/interface
 
-IMPORTANT:
-- Only generate files that have implementation details in THIS chunk
-- Follow the architecture spec for consistency with other chunks
-- Include proper imports (even for files not yet created)
-- Mark any TODOs for details that will come in later chunks
-- Write ALL files to \`${outputPath}/\` using absolute paths
+Create all files in ${outputPath}/ with complete implementation.
 ${chunkIndex === totalChunks - 1 ? `
 ### Final Chunk - Complete Documentation
-Since this is the LAST chunk, also create all documentation files:
-- \`${outputPath}/CLAUDE.md\`
-- \`${outputPath}/README.md\`
-- \`${outputPath}/USAGE.md\`
-- \`${outputPath}/CHANGELOG.md\`
+Since this is the LAST chunk, also create documentation files in ${outputPath}/:
+- CLAUDE.md
+- README.md
+- USAGE.md
+- CHANGELOG.md
 ` : ''}`;
 }
 

@@ -144,7 +144,7 @@ export async function runCourseAgent(
       }
 
       // Run GitHub integration after successful generation
-      await runGitHubIntegration(result, workerId, eventEmitter);
+      await runGitHubIntegration(result, course.name, project.description, workerId, eventEmitter);
       projectsGenerated.push(result);
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : String(error);
@@ -630,6 +630,8 @@ async function execCommand(
  */
 export async function runGitHubIntegration(
   generatedProject: GeneratedProject,
+  courseName: string,
+  projectDescription: string,
   workerId?: number,
   eventEmitter?: SynthEventEmitter
 ): Promise<void> {
@@ -685,8 +687,12 @@ export async function runGitHubIntegration(
     await execCommand('git commit -m "Init commit"', projectPath);
 
     // Create GitHub repo and push
+    // Description format: [ProjectDescription], project generated from the course: [CourseName]
+    const repoDescription = `${projectDescription}, project generated from the course: ${courseName}`
+      .replace(/"/g, '\\"')  // Escape quotes for shell
+      .substring(0, 350);    // GitHub limits description to ~350 chars
     const createResult = await execCommand(
-      `gh repo create "${repoName}" --public --source . --push --description "Auto-generated from course transcripts by CCProjectSynth"`,
+      `gh repo create "${repoName}" --public --source . --push --description "${repoDescription}"`,
       projectPath
     );
 
