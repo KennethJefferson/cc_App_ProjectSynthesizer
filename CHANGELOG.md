@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.0] - 2025-12-29
+
+### Removed
+
+- **Terminal User Interface (TUI)**: Removed OpenTUI/SolidJS-based TUI in favor of simple console output
+  - Deleted entire `src/cli/tui/` directory (23 files)
+  - Removed `@opentui/core`, `@opentui/solid`, and `solid-js` dependencies
+  - Removed `@types/babel__core` dev dependency
+  - Removed JSX configuration from `tsconfig.json`
+  - Removed solid plugin from build script
+  - Deleted `scripts/debug-tui.ts`
+
+### Changed
+
+- Replaced TUI with console-based progress logging
+  - Worker status updates printed to console
+  - GitHub integration status displayed in console
+  - Graceful shutdown messages shown in console
+- Simplified build process (no JSX transformation needed)
+
+### Technical Details
+
+- Reduced bundle size by removing SolidJS and OpenTUI dependencies
+- Simplified `src/cli/commands.ts` with `setupConsoleLogging()` function
+- Event system (`src/worker/events.ts`) retained for internal communication
+
 ## [1.2.0] - 2025-12-29
 
 ### Added
@@ -90,7 +116,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - TypeScript with strict mode enabled
 - ESM module format
 
-[Unreleased]: https://github.com/user/ccprojectsynth/compare/v1.2.0...HEAD
+[Unreleased]: https://github.com/user/ccprojectsynth/compare/v1.3.0...HEAD
+[1.3.0]: https://github.com/user/ccprojectsynth/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/user/ccprojectsynth/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/user/ccprojectsynth/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/user/ccprojectsynth/releases/tag/v1.0.0

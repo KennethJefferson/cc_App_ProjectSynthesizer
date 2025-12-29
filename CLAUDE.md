@@ -60,27 +60,9 @@ Course → Discovery Agent → project-findings.json → Generator Agents (paral
 - **`src/scanner/`**: Course and SRT file discovery with natural sort ordering
 
 - **`src/worker/`**: Concurrent processing with graceful shutdown
-  - `events.ts` - Event emitter bridging workers to TUI
+  - `events.ts` - Event emitter for progress tracking and console output
 
-- **`src/cli/tui/`**: Terminal User Interface using OpenTUI + SolidJS
-  - `launcher.ts` - Preload handling and TUI bootstrap
-  - `app.tsx` - Root component with providers
-  - `context/synth.tsx` - Reactive state management
-  - `component/` - UI components (Header, WorkerPanel, etc.)
-
-### TUI Architecture
-
-The TUI uses OpenTUI with SolidJS for reactive terminal rendering:
-
-```
-Events Flow:
-┌─────────────┐    ┌──────────────┐    ┌─────────────┐
-│   Workers   │───▶│ EventEmitter │───▶│ SynthContext│───▶ UI Components
-└─────────────┘    └──────────────┘    └─────────────┘
-```
-
-Event types: `scan:start`, `worker:start`, `worker:discovery:complete`,
-`worker:generation:progress`, `worker:complete`, `stats:update`, `shutdown:signal`
+- **`src/cli/commands.ts`**: CLI command handler with console-based progress logging
 
 ### SDK Usage Pattern
 

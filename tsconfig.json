@@ -13,8 +13,6 @@
     "outDir": "./dist",
     "rootDir": "./src",
     "types": ["bun-types", "node"],
-    "jsx": "preserve",
-    "jsxImportSource": "@opentui/solid",
     "noImplicitAny": false
   },
   "include": ["src/**/*"],

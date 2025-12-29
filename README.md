@@ -8,7 +8,6 @@ CCProjectSynth scans course directories containing SRT transcript files, analyze
 
 ## Features
 
-- **Real-time TUI Dashboard**: Terminal interface showing worker status, progress, and metrics
 - **Two-Phase Processing**: Discovery then generation using separate Claude Code skills
 - **Persistent Manifest**: `project-findings.json` enables selective/deferred generation
 - **Automatic Project Discovery**: Analyzes course transcripts to identify hands-on projects
@@ -101,36 +100,6 @@ CCProjectSynth uses a two-skill pipeline powered by the Claude Agent SDK:
 1. **project-discovery**: Analyzes all SRT files in a course, identifies hands-on coding projects, and outputs a `project-findings.json` manifest
 
 2. **project-generator**: Takes a project specification from the manifest and generates a complete working implementation with documentation
-
-## TUI Dashboard
-
-The application displays a real-time terminal interface:
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│  CCProjectSynth                          Processing • 00:13:45  │
-└─────────────────────────────────────────────────────────────────┘
-
-┌─ Progress ──────────────────────────────────────────────────────┐
-│ │████████████████░░░░░░░░░░░░░░░░░░░░░░│  42%  (17/40)         │
-│ ✓ 17 completed   ✗ 1 failed   ⊘ 3 skipped   ○ 19 remaining     │
-└─────────────────────────────────────────────────────────────────┘
-
-┌─ Workers ───────────────────────────────────────────────────────┐
-│ W0  ● Discovery    Python_FastAPI_Course          00:01:23     │
-│ W1  ● Generation   React_Hooks_Tutorial   [2/4]   00:02:45     │
-│ W2  ● Generation   Node_Express_API       [1/2]   00:00:58     │
-│ W3  ○ Idle                                                      │
-│ W4  ○ Idle                                                      │
-└─────────────────────────────────────────────────────────────────┘
-```
-
-The TUI shows:
-- **Header**: Application name, phase status, and elapsed time
-- **Progress**: Overall course completion with statistics
-- **Workers**: Real-time status of each concurrent worker
-- **Recent Activity**: Last completed/failed courses
-- **Metrics**: Average time, success rate, and ETA
 
 ## Output Structure
 
