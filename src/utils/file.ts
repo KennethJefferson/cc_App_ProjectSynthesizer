@@ -3,8 +3,21 @@
  */
 
 import { existsSync, readFileSync, writeFileSync, mkdirSync, rmSync, readdirSync, statSync } from 'fs';
+import { readdir, stat, access, readFile as readFileAsync } from 'fs/promises';
 import { join, basename } from 'path';
 import type { ProgressFile } from '../types';
+
+/**
+ * Check if a path exists (async version)
+ */
+export async function pathExistsAsync(path: string): Promise<boolean> {
+  try {
+    await access(path);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 /**
  * Check if a path exists
@@ -208,4 +221,79 @@ export function hasSubdirectories(dirPath: string): boolean {
   }
 
   return false;
+}
+
+// ============================================================================
+// ASYNC VERSIONS - For non-blocking TUI operations
+// ============================================================================
+
+/**
+ * List all subdirectories in a directory (async)
+ */
+export async function listDirectoriesAsync(dirPath: string): Promise<string[]> {
+  if (!(await pathExistsAsync(dirPath))) {
+    return [];
+  }
+
+  const entries = await readdir(dirPath);
+  const dirs: string[] = [];
+
+  for (const entry of entries) {
+    const fullPath = join(dirPath, entry);
+    const entryStat = await stat(fullPath);
+
+    if (entryStat.isDirectory()) {
+      dirs.push(entry);
+    }
+  }
+
+  return dirs.sort();
+}
+
+/**
+ * Check if directory contains any SRT files (async, recursive)
+ */
+export async function containsSrtFilesAsync(dirPath: string): Promise<boolean> {
+  if (!(await pathExistsAsync(dirPath))) {
+    return false;
+  }
+
+  const entries = await readdir(dirPath);
+
+  for (const entry of entries) {
+    const fullPath = join(dirPath, entry);
+    const entryStat = await stat(fullPath);
+
+    if (entryStat.isFile() && entry.toLowerCase().endsWith('.srt')) {
+      return true;
+    }
+
+    if (entryStat.isDirectory() && entry !== 'CODE' && entry !== '__CC_Projects') {
+      if (await containsSrtFilesAsync(fullPath)) {
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
+
+/**
+ * Read and parse JSON file (async)
+ */
+export async function readJsonFileAsync<T>(path: string): Promise<T | null> {
+  try {
+    const content = await readFileAsync(path, 'utf-8');
+    return JSON.parse(content) as T;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Read progress.json from course folder (async)
+ */
+export async function readProgressFileAsync(coursePath: string): Promise<ProgressFile | null> {
+  const progressPath = join(coursePath, 'progress.json');
+  return readJsonFileAsync<ProgressFile>(progressPath);
 }

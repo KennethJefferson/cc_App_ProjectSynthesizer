@@ -6,6 +6,7 @@
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
+    "skipDefaultLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
     "declaration": true,
@@ -13,8 +14,10 @@
     "outDir": "./dist",
     "rootDir": "./src",
     "types": ["bun-types", "node"],
-    "noImplicitAny": false
+    "noImplicitAny": false,
+    "jsx": "preserve",
+    "jsxImportSource": "@opentui/solid"
   },
   "include": ["src/**/*"],
-  "exclude": ["node_modules", "dist", "scripts"]
+  "exclude": ["node_modules", "node_modules/**/*", "dist", "scripts"]
 }

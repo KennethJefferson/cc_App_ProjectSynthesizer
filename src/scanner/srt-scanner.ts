@@ -4,6 +4,8 @@
 
 import { join } from 'path';
 import { readdirSync, statSync, existsSync, readFileSync } from 'fs';
+import { readdir, stat } from 'fs/promises';
+import { pathExistsAsync } from '../utils/file';
 import type { SrtFile } from '../types';
 
 /**
@@ -107,25 +109,70 @@ export function stripSrtFormatting(content: string): string {
   // Remove sequence numbers (lines that are just digits)
   // Remove timestamps (00:00:00,000 --> 00:00:00,000)
   // Keep text content
-  
+
   const lines = content.split('\n');
   const textLines: string[] = [];
-  
+
   for (const line of lines) {
     const trimmed = line.trim();
-    
+
     // Skip empty lines
     if (!trimmed) continue;
-    
+
     // Skip sequence numbers (just digits)
     if (/^\d+$/.test(trimmed)) continue;
-    
+
     // Skip timestamp lines
     if (/^\d{2}:\d{2}:\d{2}[,\.]\d{3}\s*-->\s*\d{2}:\d{2}:\d{2}[,\.]\d{3}/.test(trimmed)) continue;
-    
+
     // Keep text content
     textLines.push(trimmed);
   }
-  
+
   return textLines.join(' ');
+}
+
+// ============================================================================
+// ASYNC VERSIONS - For non-blocking TUI operations
+// ============================================================================
+
+/**
+ * Scan a course directory for SRT files (async)
+ * Returns sorted list of SRT filenames
+ */
+export async function scanCourseSrtsAsync(coursePath: string): Promise<string[]> {
+  const srtFiles: string[] = [];
+  await scanDirectoryAsync(coursePath, '', srtFiles);
+  return srtFiles.sort(naturalSort);
+}
+
+/**
+ * Recursively scan directory for SRT files (async)
+ */
+async function scanDirectoryAsync(basePath: string, relativePath: string, srtFiles: string[]): Promise<void> {
+  const currentPath = relativePath ? join(basePath, relativePath) : basePath;
+
+  if (!(await pathExistsAsync(currentPath))) {
+    return;
+  }
+
+  const entries = await readdir(currentPath);
+
+  for (const entry of entries) {
+    // Skip CODE directory and hidden files
+    if (entry === 'CODE' || entry === '__CC_Projects' || entry.startsWith('.')) {
+      continue;
+    }
+
+    const entryPath = join(currentPath, entry);
+    const relativeEntryPath = relativePath ? `${relativePath}/${entry}` : entry;
+    const entryStat = await stat(entryPath);
+
+    if (entryStat.isFile() && entry.toLowerCase().endsWith('.srt')) {
+      srtFiles.push(relativeEntryPath);
+    } else if (entryStat.isDirectory()) {
+      // Recurse into subdirectories (module folders)
+      await scanDirectoryAsync(basePath, relativeEntryPath, srtFiles);
+    }
+  }
 }

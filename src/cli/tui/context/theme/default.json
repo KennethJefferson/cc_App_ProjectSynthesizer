@@ -1,0 +1,27 @@
+{
+  "name": "CCProjectSynth Dark",
+  "colors": {
+    "primary": "#A855F7",
+    "secondary": "#C084FC",
+    "error": "#ef4444",
+    "success": "#22c55e",
+    "warning": "#eab308",
+    "info": "#3b82f6",
+    "text": "#f3f4f6",
+    "textMuted": "#9ca3af",
+    "textDim": "#6b7280",
+    "border": "#5a4f7a",
+    "borderSubtle": "#473e64",
+    "background": "#1a1625",
+    "backgroundAlt": "#251f35"
+  },
+  "icons": {
+    "completed": "\u2713",
+    "running": "\u25cf",
+    "pending": "\u25cb",
+    "failed": "\u2717",
+    "cancelled": "\u2298",
+    "discovery": "\u25b6",
+    "generation": "\u2699"
+  }
+}

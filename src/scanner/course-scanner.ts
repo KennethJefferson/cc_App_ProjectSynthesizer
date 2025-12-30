@@ -19,10 +19,11 @@
 
 import { join } from 'path';
 import { readdirSync, statSync, existsSync } from 'fs';
-import { listDirectories } from '../utils/file';
+import { readdir, stat } from 'fs/promises';
+import { listDirectories, listDirectoriesAsync, pathExistsAsync, containsSrtFilesAsync } from '../utils/file';
 import type { Course } from '../types';
-import { detectCourseState } from './state-detector';
-import { scanCourseSrts } from './srt-scanner';
+import { detectCourseState, detectCourseStateAsync } from './state-detector';
+import { scanCourseSrts, scanCourseSrtsAsync } from './srt-scanner';
 
 /**
  * Check if a directory contains SRT files anywhere within it (recursive)
@@ -188,14 +189,165 @@ function checkForModuleSubfolders(coursePath: string): boolean {
 }
 
 /**
- * Parallel course scanning using multiple workers
+ * Parallel course scanning using multiple workers (ASYNC - non-blocking)
  */
 export async function scanForCoursesParallel(
   inputDir: string,
   recursive: boolean,
   _scanWorkers: number
 ): Promise<Course[]> {
-  // For simplicity, use synchronous scanning for now
-  // Parallel scanning would be beneficial for network drives or very large directories
-  return scanForCourses(inputDir, recursive);
+  // Use async scanning to keep TUI responsive
+  return scanForCoursesAsync(inputDir, recursive);
+}
+
+// ============================================================================
+// ASYNC VERSIONS - For non-blocking TUI operations
+// ============================================================================
+
+/**
+ * Check if a directory contains SRT files anywhere within it (async, recursive)
+ */
+async function containsSrtFilesRecursiveAsync(dirPath: string): Promise<boolean> {
+  if (!(await pathExistsAsync(dirPath))) return false;
+
+  const entries = await readdir(dirPath);
+
+  for (const entry of entries) {
+    // Skip special directories
+    if (entry === 'CODE' || entry === '__CC_Projects' || entry.startsWith('.')) {
+      continue;
+    }
+
+    const entryPath = join(dirPath, entry);
+    const entryStat = await stat(entryPath);
+
+    if (entryStat.isFile() && entry.toLowerCase().endsWith('.srt')) {
+      return true;
+    }
+
+    if (entryStat.isDirectory()) {
+      if (await containsSrtFilesRecursiveAsync(entryPath)) {
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
+
+/**
+ * Scan input directory for courses (async - non-blocking)
+ */
+async function scanForCoursesAsync(inputDir: string, recursive: boolean): Promise<Course[]> {
+  const courses: Course[] = [];
+
+  if (!(await pathExistsAsync(inputDir))) {
+    return courses;
+  }
+
+  if (recursive) {
+    // Recursive mode: find course folders (immediate children with SRTs)
+    const subdirs = await listDirectoriesAsync(inputDir);
+
+    for (const subdir of subdirs) {
+      // Skip special directories
+      if (subdir === 'CODE' || subdir === '__CC_Projects' || subdir.startsWith('.')) {
+        continue;
+      }
+
+      const subdirPath = join(inputDir, subdir);
+
+      if (await containsSrtFilesRecursiveAsync(subdirPath)) {
+        const course = await buildCourseAsync(subdirPath);
+        if (course) {
+          courses.push(course);
+        }
+      }
+    }
+  } else {
+    // Non-recursive: check if input dir itself is a course
+    if (await containsSrtFilesRecursiveAsync(inputDir)) {
+      const course = await buildCourseAsync(inputDir);
+      if (course) {
+        courses.push(course);
+      }
+    } else {
+      // Check immediate subdirectories
+      const subdirs = await listDirectoriesAsync(inputDir);
+      for (const subdir of subdirs) {
+        if (subdir === 'CODE' || subdir === '__CC_Projects' || subdir.startsWith('.')) {
+          continue;
+        }
+
+        const subdirPath = join(inputDir, subdir);
+        if (await containsSrtFilesRecursiveAsync(subdirPath)) {
+          const course = await buildCourseAsync(subdirPath);
+          if (course) {
+            courses.push(course);
+          }
+        }
+      }
+    }
+  }
+
+  return courses;
+}
+
+/**
+ * Build a Course object from a directory path (async)
+ */
+async function buildCourseAsync(coursePath: string): Promise<Course | null> {
+  const state = await detectCourseStateAsync(coursePath);
+  const name = extractCourseName(coursePath);
+
+  // Skip already completed courses
+  if (state === 'skipped') {
+    return {
+      path: coursePath,
+      name,
+      srtFiles: [],
+      state: 'skipped',
+      hasSubfolders: false,
+    };
+  }
+
+  // Scan for SRT files (recursively within course)
+  const srtFiles = await scanCourseSrtsAsync(coursePath);
+
+  if (srtFiles.length === 0) {
+    return null;
+  }
+
+  // Check if course has module subfolders
+  const hasSubfolders = await checkForModuleSubfoldersAsync(coursePath);
+
+  return {
+    path: coursePath,
+    name,
+    srtFiles,
+    state,
+    hasSubfolders,
+  };
+}
+
+/**
+ * Check if course has subdirectories with SRT files (modules) - async
+ */
+async function checkForModuleSubfoldersAsync(coursePath: string): Promise<boolean> {
+  const entries = await readdir(coursePath);
+
+  for (const entry of entries) {
+    if (entry === 'CODE' || entry.startsWith('.')) {
+      continue;
+    }
+
+    const entryPath = join(coursePath, entry);
+    const entryStat = await stat(entryPath);
+
+    if (entryStat.isDirectory() && (await containsSrtFilesRecursiveAsync(entryPath))) {
+      return true;
+    }
+  }
+
+  return false;
 }

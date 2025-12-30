@@ -17,7 +17,7 @@ export interface RunOptions {
 }
 
 /**
- * Main synthesizer command
+ * Main synthesizer command - with TUI
  */
 export async function runSynthesizer(options: RunOptions): Promise<void> {
   const { inputDir, recursive, concurrency, scanWorkers, shutdownController } = options;
@@ -37,11 +37,22 @@ export async function runSynthesizer(options: RunOptions): Promise<void> {
     (shutdownController as any).setEventEmitter(eventEmitter);
   }
 
-  // Set up console logging for events
-  setupConsoleLogging(eventEmitter);
+  // Launch TUI - it will subscribe to events and display progress
+  const { launchTUI } = await import('./tui/launcher.js');
+
+  // Start TUI in parallel with processing
+  const tuiPromise = launchTUI({
+    options: {
+      inputDir: resolvedInput,
+      recursive,
+      concurrency,
+      scanWorkers,
+    },
+    eventEmitter,
+    shutdownController,
+  });
 
   // Phase 1: Scan for courses
-  console.log('\n📂 Scanning for courses...\n');
   eventEmitter.emit({ type: 'scan:start' });
 
   const courses = await scanForCoursesParallel(resolvedInput, recursive, scanWorkers);
@@ -49,16 +60,18 @@ export async function runSynthesizer(options: RunOptions): Promise<void> {
   const pendingCourses = courses.filter((c) => c.state === 'pending');
   const skippedCourses = courses.filter((c) => c.state === 'skipped');
 
+  // Emit each course found
+  for (const course of courses) {
+    eventEmitter.emit({ type: 'scan:course-found', course });
+  }
+
   eventEmitter.emit({
     type: 'scan:complete',
     total: courses.length,
     skipped: skippedCourses.length,
   });
 
-  console.log(`Found ${courses.length} course(s): ${pendingCourses.length} to process, ${skippedCourses.length} skipped\n`);
-
   if (courses.length === 0 || pendingCourses.length === 0) {
-    console.log('No courses to process.');
     eventEmitter.emit({
       type: 'pool:complete',
       stats: {
@@ -69,12 +82,11 @@ export async function runSynthesizer(options: RunOptions): Promise<void> {
         remaining: 0,
       },
     });
+    await tuiPromise;
     return;
   }
 
   // Phase 2: Process courses
-  console.log('🚀 Starting project synthesis...\n');
-
   await runWorkerPool(courses, {
     concurrency,
     shutdownController,
@@ -82,61 +94,6 @@ export async function runSynthesizer(options: RunOptions): Promise<void> {
     eventEmitter,
   });
 
-  console.log('\n✅ All processing complete.');
-}
-
-/**
- * Set up console logging for synth events
- */
-function setupConsoleLogging(eventEmitter: ReturnType<typeof createEventEmitter>): void {
-  eventEmitter.on((event) => {
-    switch (event.type) {
-      case 'worker:start':
-        console.log(`[W${event.workerId}] Starting: ${event.course.name}`);
-        break;
-
-      case 'worker:discovery:complete':
-        console.log(`[W${event.workerId}] Discovery complete: ${event.projectCount} project(s) found`);
-        break;
-
-      case 'worker:generation:progress':
-        console.log(`[W${event.workerId}] Generated: ${event.projectName} (${event.current}/${event.total})`);
-        break;
-
-      case 'worker:github:complete':
-        console.log(`[W${event.workerId}] Pushed to GitHub: ${event.repoUrl}`);
-        break;
-
-      case 'worker:github:skipped':
-        console.log(`\x1b[33m[GitHub] ${event.reason} - skipping repo creation.\x1b[0m`);
-        break;
-
-      case 'worker:github:failed':
-        console.log(`\x1b[31m[W${event.workerId}] GitHub push failed for ${event.projectName}: ${event.error}\x1b[0m`);
-        break;
-
-      case 'worker:complete':
-        const { result } = event;
-        const status = result.status === 'complete' ? '✓' : result.status === 'failed' ? '✗' : '○';
-        console.log(`[W${event.workerId}] ${status} Completed: ${result.projectsGenerated.length} project(s)`);
-        break;
-
-      case 'worker:error':
-        console.log(`\x1b[31m[W${event.workerId}] Error: ${event.error}\x1b[0m`);
-        break;
-
-      case 'pool:complete':
-        const { stats } = event;
-        console.log(`\n📊 Summary: ${stats.completed} completed, ${stats.failed} failed, ${stats.skipped} skipped`);
-        break;
-
-      case 'shutdown:signal':
-        if (event.count === 1) {
-          console.log('\n⏳ Shutting down gracefully... (press Ctrl+C again to force)');
-        } else {
-          console.log('\n⚠️ Force shutting down...');
-        }
-        break;
-    }
-  });
+  // Wait for TUI to finish
+  await tuiPromise;
 }

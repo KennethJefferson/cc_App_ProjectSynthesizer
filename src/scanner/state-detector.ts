@@ -4,7 +4,7 @@
 
 import { existsSync } from 'fs';
 import { join } from 'path';
-import { readProgressFile, deleteDirectory } from '../utils/file';
+import { readProgressFile, deleteDirectory, pathExistsAsync, readProgressFileAsync } from '../utils/file';
 import type { CourseState } from '../types';
 
 /**
@@ -82,4 +82,53 @@ function cleanupIncompleteCourse(coursePath: string): void {
 export function prepareCourseForProcessing(coursePath: string): void {
   // This is now handled by the Claude agent via the skill
   // The agent will create progress.json and the folder structure
+}
+
+// ============================================================================
+// ASYNC VERSIONS - For non-blocking TUI operations
+// ============================================================================
+
+/**
+ * Detect the current state of a course (async)
+ */
+export async function detectCourseStateAsync(coursePath: string): Promise<CourseState> {
+  const progressPath = join(coursePath, 'progress.json');
+  const ccProjectsPath = join(coursePath, 'CODE', '__CC_Projects');
+
+  // Check for __CC_Projects folder - this is the definitive "done" indicator
+  const hasProjects = await pathExistsAsync(ccProjectsPath);
+
+  // Check for progress.json
+  if (await pathExistsAsync(progressPath)) {
+    const progress = await readProgressFileAsync(coursePath);
+
+    if (progress) {
+      // Accept both 'complete' and 'completed' (agents may use either)
+      if (progress.status === 'complete' || progress.status === 'completed') {
+        // Only skip if projects were actually generated
+        if (hasProjects) {
+          return 'skipped'; // Fully done - discovery + generation complete
+        }
+        // Discovery done but generation not done - restart generation
+        return 'pending';
+      } else {
+        // Status is "started" - incomplete, need to restart
+        cleanupIncompleteCourse(coursePath);
+        return 'pending';
+      }
+    } else {
+      // Corrupted progress file, treat as incomplete
+      cleanupIncompleteCourse(coursePath);
+      return 'pending';
+    }
+  }
+
+  // No progress.json, but check for __CC_Projects folder
+  if (hasProjects) {
+    // Assume complete if folder exists (user may have manually deleted progress.json)
+    return 'skipped';
+  }
+
+  // Fresh course
+  return 'pending';
 }
