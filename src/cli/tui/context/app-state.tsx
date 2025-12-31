@@ -59,6 +59,10 @@ export interface AppStateContext {
   overallProgress: () => { current: number; total: number; percent: number };
   elapsedTime: () => number;
 
+  // Shutdown state
+  isShuttingDown: () => boolean;
+  ctrlCCount: () => number;
+
   // Actions
   requestShutdown: () => void;
   shutdownRequested: () => boolean;
@@ -74,6 +78,8 @@ const { provider: AppStateProvider, use: useAppState } = createSimpleContext<App
     const [coursesFound, setCoursesFound] = createSignal<Course[]>([]);
     const [scanComplete, setScanComplete] = createSignal(false);
     const [shutdownRequested, setShutdownRequested] = createSignal(false);
+    const [isShuttingDown, setIsShuttingDown] = createSignal(false);
+    const [ctrlCCount, setCtrlCCount] = createSignal(0);
     const [startTime, setStartTime] = createSignal<number | null>(null);
     const [elapsedTime, setElapsedTime] = createSignal(0);
 
@@ -276,9 +282,28 @@ const { provider: AppStateProvider, use: useAppState } = createSimpleContext<App
     };
 
     const requestShutdown = () => {
+      const count = ctrlCCount() + 1;
+      setCtrlCCount(count);
+      setIsShuttingDown(true);
       setShutdownRequested(true);
-      // Mark the shutdown controller as shutting down
+      setPhase('shutdown');
+
+      // Mark the shutdown controller
       (shutdownController as any).isShuttingDown = true;
+
+      // Emit event for UI
+      eventEmitter.emit({ type: 'shutdown:signal', count });
+
+      if (count === 1) {
+        // First Ctrl+C: graceful shutdown - let current work finish
+        addLog('warning', 'Graceful shutdown requested... (press Ctrl+C again to force)');
+      } else {
+        // Second Ctrl+C: force exit
+        (shutdownController as any).forceExit = true;
+        addLog('warning', 'Force shutdown!');
+        // Give UI a moment to show the message, then exit
+        setTimeout(() => process.exit(0), 100);
+      }
     };
 
     return {
@@ -291,6 +316,8 @@ const { provider: AppStateProvider, use: useAppState } = createSimpleContext<App
       logs,
       overallProgress,
       elapsedTime,
+      isShuttingDown,
+      ctrlCCount,
       requestShutdown,
       shutdownRequested,
     };

@@ -4,10 +4,44 @@
  */
 
 import { render } from '@opentui/solid';
+import { onMount, onCleanup } from 'solid-js';
 import { ThemeProvider } from './context/theme.js';
-import { AppStateProvider } from './context/app-state.js';
+import { AppStateProvider, useAppState } from './context/app-state.js';
 import { MainRoute } from './routes/main.js';
 import type { TUILaunchParams } from './launcher.js';
+
+// Global shutdown handler reference (like ffmpeg-processor pattern)
+let globalShutdownHandler: (() => void) | null = null;
+
+export function setShutdownHandler(handler: () => void) {
+  globalShutdownHandler = handler;
+}
+
+export function triggerShutdown() {
+  if (globalShutdownHandler) {
+    globalShutdownHandler();
+  }
+}
+
+/**
+ * Inner app component that has access to app state
+ */
+function AppInner() {
+  const state = useAppState();
+
+  // Register shutdown handler on mount
+  onMount(() => {
+    setShutdownHandler(() => {
+      state.requestShutdown();
+    });
+  });
+
+  onCleanup(() => {
+    globalShutdownHandler = null;
+  });
+
+  return <MainRoute />;
+}
 
 function App(props: TUILaunchParams) {
   return (
@@ -18,7 +52,7 @@ function App(props: TUILaunchParams) {
         inputDir={props.options.inputDir}
         concurrency={props.options.concurrency}
       >
-        <MainRoute />
+        <AppInner />
       </AppStateProvider>
     </ThemeProvider>
   );
@@ -30,31 +64,41 @@ export async function startTUI(params: TUILaunchParams): Promise<void> {
 
   // Cleanup function
   const cleanup = () => {
-    process.stdout.write('\x1b[?25h\x1b[0m'); // Show cursor, reset colors
+    process.stdout.write('\x1b[?25h'); // Show cursor
+    process.stdout.write('\x1b[0m');   // Reset colors
   };
 
-  // Handle process exit
-  process.on('exit', cleanup);
-  process.on('SIGINT', () => {
-    cleanup();
-    // Let the shutdown controller handle the actual shutdown
-  });
+  // Set up Ctrl+C handler (single handler like ffmpeg-processor)
+  const handleSigint = () => {
+    if (globalShutdownHandler) {
+      globalShutdownHandler();
+    } else {
+      // If no handler registered yet, just exit
+      cleanup();
+      process.exit(0);
+    }
+  };
 
-  // Start rendering - render returns Promise<void>
-  const renderPromise = render(() => <App {...params} />, {
-    targetFps: 30,
+  process.on('SIGINT', handleSigint);
+
+  // Start rendering
+  // Note: useKittyKeyboard allows proper keyboard handling
+  // exitOnCtrlC is NOT set (default behavior) to let our handler work
+  const instance = render(() => <App {...params} />, {
+    fps: 30,
     useMouse: false,
-    exitOnCtrlC: false,
+    useKittyKeyboard: true,
   });
 
   // Return a promise that resolves when the app is done
   return new Promise((resolve) => {
-    // Listen for shutdown complete
+    // Listen for shutdown complete or pool complete
     const unsubscribe = params.eventEmitter.on((event) => {
       if (event.type === 'shutdown:complete' || event.type === 'pool:complete') {
         // Give a moment for final render
         setTimeout(() => {
           cleanup();
+          process.off('SIGINT', handleSigint);
           unsubscribe();
           resolve();
         }, 500);

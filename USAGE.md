@@ -251,11 +251,20 @@ If no projects are discovered:
 
 ## Handling Interruptions
 
+### Signal Handling
+
+The application uses a robust signal handling system with an emergency handler registered at process startup:
+
+1. **Emergency Handler**: Registered before TUI loads, ensures Ctrl+C always works
+2. **TUI Handler**: Updates UI to show shutdown status
+3. **App State**: Tracks Ctrl+C count for graceful vs force behavior
+
 ### Graceful Shutdown
 
 Press **Ctrl+C once** for graceful shutdown:
 
-- The TUI header changes to show "Shutdown" phase
+- Console shows: `Shutdown requested... (Ctrl+C again to force)`
+- The TUI phase changes to "Shutdown"
 - Workers complete their current courses
 - No new courses are started
 - The application exits when all workers finish
@@ -271,9 +280,17 @@ Press **Ctrl+C once** for graceful shutdown:
 Press **Ctrl+C twice** for immediate exit:
 
 - First Ctrl+C initiates graceful shutdown
-- Second Ctrl+C forces immediate termination
+- Second Ctrl+C shows `Force exit!` and terminates immediately
+- Terminal cursor and colors are properly restored
 
 **Warning:** Force exit may leave courses in incomplete state. They will be restarted on next run.
+
+### Why This Matters
+
+The emergency signal handler ensures Ctrl+C works even if:
+- The TUI fails to start
+- An agent operation is blocking the event loop
+- The UI becomes unresponsive during processing
 
 ## Troubleshooting
 

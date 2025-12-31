@@ -1,5 +1,9 @@
 /**
  * Graceful shutdown handling
+ *
+ * Note: Signal handlers (SIGINT/SIGTERM) are set up in app.tsx
+ * to avoid duplicate handlers. This module provides the controller
+ * interface that tracks shutdown state.
  */
 
 import type { ShutdownController } from '../types';
@@ -13,7 +17,7 @@ export interface ShutdownControllerWithEvents extends ShutdownController {
 }
 
 /**
- * Setup signal handlers for graceful shutdown
+ * Create shutdown controller (signal handlers are set up in TUI app.tsx)
  */
 export function setupShutdownHandler(): ShutdownControllerWithEvents {
   let eventEmitter: SynthEventEmitter | null = null;
@@ -26,27 +30,8 @@ export function setupShutdownHandler(): ShutdownControllerWithEvents {
     },
   };
 
-  let ctrlCCount = 0;
-
-  const handleSignal = (_signal: string) => {
-    ctrlCCount++;
-
-    if (ctrlCCount === 1) {
-      controller.isShuttingDown = true;
-      eventEmitter?.emit({ type: 'shutdown:signal', count: 1 });
-    } else {
-      controller.forceExit = true;
-      eventEmitter?.emit({ type: 'shutdown:signal', count: 2 });
-      // Give TUI a moment to show the message before exiting
-      setTimeout(() => process.exit(1), 100);
-    }
-  };
-
-  // Handle Ctrl+C (SIGINT)
-  process.on('SIGINT', () => handleSignal('SIGINT'));
-
-  // Handle kill signal (SIGTERM)
-  process.on('SIGTERM', () => handleSignal('SIGTERM'));
+  // Note: Signal handlers are registered in app.tsx to ensure single handler
+  // and proper integration with TUI state
 
   return controller;
 }

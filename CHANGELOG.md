@@ -7,6 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.0] - 2025-12-30
+
+### Added
+
+- **Restored Terminal User Interface (TUI)**: Re-added OpenTUI/SolidJS-based TUI for real-time progress display
+  - Worker status panel showing discovery/generation phases
+  - Progress bar with completion statistics
+  - Log panel with recent activity
+  - Shutdown status indicators
+
+### Fixed
+
+- **Improved Graceful Shutdown**: Ported robust shutdown handling from ffmpeg-processor project
+  - Emergency signal handler registered at process startup (before TUI loads)
+  - Single Ctrl+C: Graceful shutdown with status message
+  - Double Ctrl+C: Force immediate exit
+  - Shutdown controller linked to emergency handler for reliable signal propagation
+  - Added `useKittyKeyboard` option for proper keyboard handling in TUI
+
+### Technical Details
+
+- Signal handlers (SIGINT/SIGTERM) now set up in `src/index.ts` before any other initialization
+- `linkShutdownController()` function connects shutdown state to emergency handler
+- TUI render options updated to match ffmpeg-processor pattern (`fps`, `useKittyKeyboard`)
+- Removed duplicate signal handlers from `src/worker/shutdown.ts`
+- Added `ctrlCCount` tracking in app state for proper first/second Ctrl+C detection
+
 ## [1.3.0] - 2025-12-29
 
 ### Removed
@@ -116,7 +143,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - TypeScript with strict mode enabled
 - ESM module format
 
-[Unreleased]: https://github.com/user/ccprojectsynth/compare/v1.3.0...HEAD
+[Unreleased]: https://github.com/user/ccprojectsynth/compare/v1.4.0...HEAD
+[1.4.0]: https://github.com/user/ccprojectsynth/compare/v1.3.0...v1.4.0
 [1.3.0]: https://github.com/user/ccprojectsynth/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/user/ccprojectsynth/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/user/ccprojectsynth/compare/v1.0.0...v1.1.0

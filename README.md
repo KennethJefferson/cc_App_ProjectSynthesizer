@@ -157,8 +157,12 @@ The application determines course state as follows:
 
 ## Graceful Shutdown
 
-- **Single Ctrl+C**: Stops accepting new courses, waits for current workers to finish
+The application uses a robust signal handling system:
+
+- **Single Ctrl+C**: Shows "Shutdown requested..." message, stops accepting new courses, waits for current workers to finish their current course
 - **Double Ctrl+C**: Forces immediate exit (may leave courses incomplete)
+
+The emergency signal handler is registered at process startup before the TUI loads, ensuring Ctrl+C always works even if the UI becomes unresponsive.
 
 ## Error Handling
 

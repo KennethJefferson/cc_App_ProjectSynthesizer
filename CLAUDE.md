@@ -135,8 +135,27 @@ Course Folder/
 
 ## Graceful Shutdown
 
-- **Single Ctrl+C**: Stops accepting new courses, waits for current workers
-- **Double Ctrl+C**: Forces immediate exit
+The application uses a robust shutdown system ported from the ffmpeg-processor project:
+
+### Signal Handling Architecture
+
+1. **Emergency Handler** (`src/index.ts`): Registered at process startup BEFORE any other initialization
+   - Catches SIGINT/SIGTERM immediately
+   - Tracks Ctrl+C count for graceful vs force exit
+   - Linked to shutdown controller via `linkShutdownController()`
+
+2. **TUI Handler** (`src/cli/tui/app.tsx`): Global shutdown handler connected to app state
+   - Updates UI to show shutdown status
+   - Coordinates with worker pool to stop gracefully
+
+3. **App State** (`src/cli/tui/context/app-state.tsx`): Tracks `ctrlCCount` and `isShuttingDown`
+   - First Ctrl+C: Sets graceful shutdown mode
+   - Second Ctrl+C: Triggers `process.exit(0)`
+
+### User Behavior
+
+- **Single Ctrl+C**: Shows "Shutdown requested..." message, stops accepting new courses, waits for current workers to finish
+- **Double Ctrl+C**: Forces immediate exit with cursor/color cleanup
 
 ## Dependencies
 
